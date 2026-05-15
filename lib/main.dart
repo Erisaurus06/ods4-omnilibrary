@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart'; // Marcará error temporalmente, es normal
+import 'screens/home_screen.dart';
 
-void main() {
+void main() async {
+  // --- PREPARACIÓN PARA FIREBASE ---
+  // WidgetsFlutterBinding.ensureInitialized();
+  // await Firebase.initializeApp();
+
   runApp(const OmniLibraryApp());
 }
 
@@ -12,26 +16,34 @@ class OmniLibraryApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OmniLibrary',
-      debugShowCheckedModeBanner:
-          false, // Quitamos la molesta etiqueta de "DEBUG"
+      debugShowCheckedModeBanner: false,
+      // DISEÑO MINIMALISTA: Blancos, negros y grises
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor:
-              Colors.blueGrey, // Un color base sobrio, ideal para lectura
-          brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(
+          0xFFFAFAFA,
+        ), // Un blanco roto muy elegante
+        colorScheme: const ColorScheme.light(
+          primary: Colors.black, // Botones principales en negro
+          secondary: Colors.grey,
+          surface: Colors.white, // Tarjetas blancas
+          background: Color(0xFFFAFAFA),
         ),
         useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blueGrey,
-          brightness: Brightness.dark,
+        // Al no definir 'fontFamily', usará la nativa de iOS y Android automáticamente
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFFAFAFA),
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.black87),
+          titleTextStyle: TextStyle(
+            color: Colors.black87,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            letterSpacing:
+                -0.5, // Letras ligeramente más juntas (toque premium)
+          ),
         ),
-        useMaterial3: true,
       ),
-      // La app se adapta automáticamente al tema claro/oscuro del celular del usuario
-      themeMode: ThemeMode.system,
-      home: const HomeScreen(), // Aquí llamamos a tu pantalla principal
+      home: const HomeScreen(),
     );
   }
 }
