@@ -5,6 +5,7 @@ import 'package:omnilibrary/services/rss_service.dart';
 import '../services/wikipedia_service.dart';
 import '../services/rss_service.dart';
 import 'package:dart_rss/dart_rss.dart';
+import 'package:file_picker/file_picker.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,11 +17,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _indiceActual = 0; // Controla en qué pestaña estamos
 
-  // Lista de las 4 pantallas principales
   final List<Widget> _pantallas = [
     const _SeccionExplorar(),
-    const _SeccionNoticias(), // ¡Aquí conectamos la nueva pantalla!
-    const Center(child: Text('Biblioteca: Solo PDFs y Libros')),
+    const _SeccionNoticias(),
+    const _SeccionBiblioteca(), // ¡Conectamos la biblioteca real!
     const Center(child: Text('Configuración del Sistema')),
   ];
 
@@ -380,6 +380,155 @@ class _SeccionNoticias extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// --- SECCIÓN 3: BIBLIOTECA (Tus PDFs y Libros) ---
+class _SeccionBiblioteca extends StatefulWidget {
+  const _SeccionBiblioteca();
+
+  @override
+  State<_SeccionBiblioteca> createState() => _SeccionBibliotecaState();
+}
+
+class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
+  // Aquí guardaremos la lista de archivos que el usuario vaya agregando
+  List<PlatformFile> _misDocumentos = [];
+
+  // Función para abrir el explorador nativo del celular
+  Future<void> _agregarDocumento() async {
+    try {
+      FilePickerResult? resultado = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: [
+          'pdf',
+          'epub',
+        ], // Solo permitimos formatos de lectura
+        allowMultiple: true, // Permite seleccionar varios a la vez
+      );
+
+      if (resultado != null) {
+        setState(() {
+          // Agregamos los archivos nuevos a nuestra estantería
+          _misDocumentos.addAll(resultado.files);
+        });
+      }
+    } catch (e) {
+      print("Error al abrir los archivos: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mis Documentos'),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: 'Añadir PDF',
+            onPressed: _agregarDocumento,
+          ),
+        ],
+      ),
+      // Si la estantería está vacía, mostramos un mensaje amigable
+      body: _misDocumentos.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.menu_book_outlined,
+                    size: 80,
+                    color: Colors.grey[300],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Tu estantería está vacía',
+                    style: TextStyle(fontSize: 18, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _agregarDocumento,
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    label: const Text('Importar PDF o ePub'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black, // Botón negro premium
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          // Si ya hay archivos, los mostramos en formato de lista elegante
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 10.0,
+              ),
+              itemCount: _misDocumentos.length,
+              itemBuilder: (context, index) {
+                final archivo = _misDocumentos[index];
+
+                // Calculamos el tamaño del archivo para mostrarlo (MB)
+                final double tamanoMB = archivo.size / (1024 * 1024);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(12),
+                      leading: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          archivo.extension == 'pdf'
+                              ? Icons.picture_as_pdf_outlined
+                              : Icons.book_outlined,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      title: Text(
+                        archivo.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${archivo.extension!.toUpperCase()} • ${tamanoMB.toStringAsFixed(2)} MB',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.black26,
+                      ),
+                      onTap: () {
+                        // Aquí conectaremos el visor de PDFs nativo
+                        print("Abrir archivo: ${archivo.path}");
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
