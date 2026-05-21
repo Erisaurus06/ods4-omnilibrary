@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
+import 'providers/theme_provider.dart';
+import 'services/local_db_service.dart';
 
 void main() async {
-  // --- PREPARACIÓN PARA FIREBASE ---
-  // WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+  // Aseguramos que los motores nativos estén listos antes de inicializar la BD
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocalDbService.init();
 
-  runApp(const OmniLibraryApp());
+  runApp(
+    // Envolvemos toda la aplicación en el Provider para el cambio de temas
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const OmniLibraryApp(),
+    ),
+  );
 }
 
 class OmniLibraryApp extends StatelessWidget {
@@ -14,34 +23,32 @@ class OmniLibraryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Escuchamos los cambios del Modo Oscuro
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'OmniLibrary',
       debugShowCheckedModeBanner: false,
-      // DISEÑO MINIMALISTA: Blancos, negros y grises
+      themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(
+        brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(
           0xFFFAFAFA,
-        ), // Un blanco roto muy elegante
-        colorScheme: const ColorScheme.light(
-          primary: Colors.black, // Botones principales en negro
-          secondary: Colors.grey,
-          surface: Colors.white, // Tarjetas blancas
-          background: Color(0xFFFAFAFA),
-        ),
-        useMaterial3: true,
-        // Al no definir 'fontFamily', usará la nativa de iOS y Android automáticamente
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFFAFAFA),
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black87),
-          titleTextStyle: TextStyle(
-            color: Colors.black87,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            letterSpacing:
-                -0.5, // Letras ligeramente más juntas (toque premium)
-          ),
-        ),
+        ), // Tu fondo blanco roto
+        primaryColor: Colors.black,
+        cardColor: Colors.white,
+        dividerColor: Colors.grey[300],
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(
+          0xFF121212,
+        ), // Tu fondo oscuro elegante
+        primaryColor: Colors.white,
+        cardColor: const Color(0xFF1E1E1E),
+        dividerColor: Colors.grey[800],
+        // Esto asegura que la base se ponga oscura automáticamente
+        colorScheme: const ColorScheme.dark(surface: Color(0xFF1E1E1E)),
       ),
       home: const HomeScreen(),
     );

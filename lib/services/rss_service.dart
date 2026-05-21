@@ -5,7 +5,7 @@ class RssService {
   static Future<RssFeed?> obtenerNoticias() async {
     try {
       final url = Uri.parse(
-        'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/seccion/tecnologia/portada',
+        'https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml', // RSS Estable General
       );
 
       final response = await http.get(url);

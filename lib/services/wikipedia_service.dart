@@ -25,7 +25,15 @@ class WikipediaService {
         final data = json.decode(response.body);
 
         // Retornamos únicamente la lista de resultados
-        return data['query']['search'] as List<dynamic>;
+        List<dynamic> resultados = data['query']['search'] as List<dynamic>;
+
+        // Limpiamos las etiquetas HTML del snippet para una mejor lectura
+        for (var i = 0; i < resultados.length; i++) {
+          String snippet = resultados[i]['snippet'] ?? '';
+          resultados[i]['snippet'] = snippet.replaceAll(RegExp(r'<[^>]*>'), '');
+        }
+
+        return resultados;
       } else {
         print('Error del servidor: ${response.statusCode}');
         return [];
