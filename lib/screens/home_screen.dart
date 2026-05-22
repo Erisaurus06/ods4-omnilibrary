@@ -377,15 +377,24 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
 // --- Mantenemos los widgets de _BuscadorUniversal, _FiltrosCategorias y _TarjetaArticulo igual que antes ---
 // --- COMPONENTES (WIDGETS) REUTILIZABLES ---
 
-class _BuscadorUniversal extends StatelessWidget {
+class _BuscadorUniversal extends StatefulWidget {
   final Function(String) onBuscar; // Recibimos la función
 
   const _BuscadorUniversal({required this.onBuscar});
 
   @override
+  State<_BuscadorUniversal> createState() => _BuscadorUniversalState();
+}
+
+class _BuscadorUniversalState extends State<_BuscadorUniversal> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      onSubmitted: onBuscar, // Activa la búsqueda al dar "Enter" en el teclado
+      controller: _controller,
+      onSubmitted:
+          widget.onBuscar, // Activa la búsqueda al dar "Enter" en el teclado
       textInputAction: TextInputAction.search, // Cambia el botón a una lupa
       decoration: InputDecoration(
         hintText: 'Buscar conceptos, noticias...',
@@ -395,6 +404,16 @@ class _BuscadorUniversal extends StatelessWidget {
         prefixIcon: Icon(
           Icons.search,
           color: Theme.of(context).primaryColor.withOpacity(0.6),
+        ),
+        suffixIcon: IconButton(
+          icon: Icon(
+            Icons.cancel_outlined, // Icono de limpieza minimalista
+            color: Theme.of(context).primaryColor.withOpacity(0.4),
+          ),
+          onPressed: () {
+            _controller.clear();
+            // Opcional: enfocar el teclado de nuevo aquí si se desea
+          },
         ),
         filled: true,
         fillColor: Theme.of(context).cardColor,
@@ -595,20 +614,33 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
   late Future<RssFeed?> _noticiasFuture;
   final NewsFilterService _newsFilterService = NewsFilterService();
 
+  // Centralizamos la llamada para poder invocarla al cambiar de categoría
+  void _cargarNoticias() {
+    _noticiasFuture = RssService.obtenerNoticiasPorCategoria(
+      _categoriaSeleccionada,
+    );
+  }
+
+  // Función dedicada para el 'Pull-to-refresh'
+  Future<void> _alRefrescar() async {
+    setState(() {
+      _cargarNoticias();
+    });
+    await _noticiasFuture;
+  }
+
   @override
   void initState() {
     super.initState();
-    _noticiasFuture = RssService.obtenerNoticias();
+    _cargarNoticias(); // Carga la categoría inicial por defecto
   }
 
-  String _categoriaSeleccionada = 'Recientes';
+  String _categoriaSeleccionada = 'Videojuegos';
   final List<String> _categorias = [
-    'Recientes',
-    'Nacional',
-    'Internacional',
-    'Seguridad',
     'Videojuegos',
-    'Tecnología',
+    'Nacionales',
+    'Internacionales',
+    'Seguridad',
   ];
 
   @override
@@ -636,7 +668,10 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                     label: Text(cat),
                     selected: isSelected,
                     onSelected: (bool selected) {
-                      setState(() => _categoriaSeleccionada = cat);
+                      setState(() {
+                        _categoriaSeleccionada = cat;
+                        _cargarNoticias(); // Descarga noticias frescas al instante
+                      });
                     },
                     selectedColor: primaryColor,
                     labelStyle: TextStyle(
@@ -647,7 +682,7 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                     ),
                     backgroundColor: Theme.of(context).cardColor,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
                         color: isSelected
                             ? primaryColor
@@ -689,18 +724,6 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                 // Convertimos a lista modificable para poder ordenarla
                 var articulos = feed.items.toList();
 
-                // --- LÓGICA DE FILTRADO POR CATEGORÍA ---
-                if (_categoriaSeleccionada != 'Recientes') {
-                  articulos = articulos.where((articulo) {
-                    final tituloStr = (articulo.title ?? '').toLowerCase();
-                    final descStr = (articulo.description ?? '').toLowerCase();
-                    final busqueda = _categoriaSeleccionada.toLowerCase();
-
-                    return tituloStr.contains(busqueda) ||
-                        descStr.contains(busqueda);
-                  }).toList();
-                }
-
                 // --- NUEVA LÓGICA: ORDENAR POR RELEVANCIA ---
                 articulos.sort((a, b) {
                   final textoA = '${a.title ?? ''} ${a.description ?? ''}';
@@ -726,35 +749,40 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20.0,
-                    vertical: 10.0,
+                return RefreshIndicator(
+                  onRefresh: _alRefrescar,
+                  color: Theme.of(context).primaryColor,
+                  backgroundColor: Theme.of(context).cardColor,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 10.0,
+                    ),
+                    itemCount: articulos.length,
+                    itemBuilder: (context, index) {
+                      final articulo = articulos[index];
+                      final textoEvaluacion =
+                          '${articulo.title ?? ''} ${articulo.description ?? ''}';
+                      final score = _newsFilterService.evaluateRelevance(
+                        textoEvaluacion,
+                      );
+
+                      // Limpiar etiquetas HTML de la descripción
+                      String cleanDescription = (articulo.description ?? '')
+                          .replaceAll(RegExp(r'<[^>]*>'), '');
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: _TarjetaArticulo(
+                          titulo: articulo.title ?? 'Sin título',
+                          fuente: feed.title ?? 'Noticias',
+                          tiempoLectura: 'Reciente',
+                          isDestacado: score > 0.8,
+                          contenido: cleanDescription,
+                        ),
+                      );
+                    },
                   ),
-                  itemCount: articulos.length,
-                  itemBuilder: (context, index) {
-                    final articulo = articulos[index];
-                    final textoEvaluacion =
-                        '${articulo.title ?? ''} ${articulo.description ?? ''}';
-                    final score = _newsFilterService.evaluateRelevance(
-                      textoEvaluacion,
-                    );
-
-                    // Limpiar etiquetas HTML de la descripción
-                    String cleanDescription = (articulo.description ?? '')
-                        .replaceAll(RegExp(r'<[^>]*>'), '');
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: _TarjetaArticulo(
-                        titulo: articulo.title ?? 'Sin título',
-                        fuente: feed.title ?? 'Noticias',
-                        tiempoLectura: 'Reciente',
-                        isDestacado: score > 0.8,
-                        contenido: cleanDescription,
-                      ),
-                    );
-                  },
                 );
               },
             ),
@@ -867,16 +895,21 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Mi Biblioteca'), centerTitle: false),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text(
+          'Añadir',
+          style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.5),
+        ),
+        elevation: 2,
         onPressed: () {
           // Menú inferior para seleccionar tipo de archivo
           showModalBottomSheet(
             context: context,
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             ),
             backgroundColor: Colors.white,
             builder: (context) => SafeArea(
@@ -1130,6 +1163,98 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
             );
           }).toList(),
         ],
+      ),
+    );
+  }
+}
+
+// --- WIDGET PARA ANIMACIÓN DE CARGA (SKELETON) ---
+class _NewsLoadingSkeleton extends StatefulWidget {
+  const _NewsLoadingSkeleton();
+
+  @override
+  State<_NewsLoadingSkeleton> createState() => _NewsLoadingSkeletonState();
+}
+
+class _NewsLoadingSkeletonState extends State<_NewsLoadingSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true); // Efecto de latido continuo
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dividerColor = Theme.of(context).dividerColor ?? Colors.grey[300]!;
+
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_controller),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+        itemCount: 5, // Mostramos 5 elementos fantasma
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Container(
+              height: 110,
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: dividerColor),
+              ),
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 16,
+                          width: double.infinity,
+                          color: dividerColor.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 16,
+                          width: 150,
+                          color: dividerColor.withOpacity(0.5),
+                        ),
+                        const Spacer(),
+                        Container(
+                          height: 12,
+                          width: 100,
+                          color: dividerColor.withOpacity(0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: dividerColor.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

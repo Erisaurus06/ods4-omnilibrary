@@ -17,7 +17,10 @@ class WikipediaService {
 
     try {
       // Hacemos la petición a internet
-      final response = await http.get(url);
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'OmniLibraryApp/1.0 (contacto@tuemail.com)'},
+      );
 
       // Código 200 significa que la conexión fue exitosa
       if (response.statusCode == 200) {
