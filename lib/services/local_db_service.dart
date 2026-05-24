@@ -2,10 +2,16 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 class LocalDbService {
   static const String _boxName = 'bibliotecaBox';
+  static const String _citasBox = 'citasBox';
+  static const String _progresoBox = 'progresoBox';
+  static const String _noticiasBox = 'noticiasBox';
 
   static Future<void> init() async {
     await Hive.initFlutter();
     await Hive.openBox<Map<dynamic, dynamic>>(_boxName);
+    await Hive.openBox<List<dynamic>>(_citasBox);
+    await Hive.openBox<dynamic>(_progresoBox);
+    await Hive.openBox<String>(_noticiasBox);
   }
 
   static Box<Map<dynamic, dynamic>> get _box =>
@@ -25,5 +31,53 @@ class LocalDbService {
     Map<String, dynamic> doc,
   ) async {
     await _box.putAt(index, doc);
+  }
+
+  // Método para eliminar documentos de la biblioteca
+  static Future<void> eliminarDocumento(int index) async {
+    await _box.deleteAt(index);
+  }
+
+  // --- Citas ---
+  static Box<List<dynamic>> get _boxCitas => Hive.box<List<dynamic>>(_citasBox);
+
+  static List<String> obtenerCitas() {
+    return _boxCitas.get('citas_lista', defaultValue: [])?.cast<String>() ?? [];
+  }
+
+  static Future<void> guardarCita(String cita) async {
+    final citas = obtenerCitas();
+    citas.insert(0, cita);
+    await _boxCitas.put('citas_lista', citas);
+  }
+
+  static Future<void> eliminarCita(int index) async {
+    final citas = obtenerCitas();
+    if (index >= 0 && index < citas.length) {
+      citas.removeAt(index);
+      await _boxCitas.put('citas_lista', citas);
+    }
+  }
+
+  // --- Progreso ---
+  static Box<dynamic> get _boxProgreso => Hive.box<dynamic>(_progresoBox);
+
+  static dynamic obtenerProgreso(String key) {
+    return _boxProgreso.get(key);
+  }
+
+  static Future<void> guardarProgreso(String key, dynamic progreso) async {
+    await _boxProgreso.put(key, progreso);
+  }
+
+  // --- Noticias Caché ---
+  static Box<String> get _boxNoticias => Hive.box<String>(_noticiasBox);
+
+  static String? obtenerNoticias(String categoria) {
+    return _boxNoticias.get(categoria);
+  }
+
+  static Future<void> guardarNoticias(String categoria, String xml) async {
+    await _boxNoticias.put(categoria, xml);
   }
 }

@@ -1,4 +1,10 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 class AiTranslationService {
+  // Reemplaza esto con tu API Key real de Google AI Studio
+  static const String _geminiApiKey = 'AIzaSyCLmUTQT375WWYqhmkoNHKLYgcnxP9Qc2c';
+
   /// Genera un prompt contextualizado basado en el tipo de lectura,
   /// asegurando que el modelo de Inteligencia Artificial entienda las
   /// reglas de retención de formato nativo, OCR y saltos de línea.
@@ -33,5 +39,52 @@ class AiTranslationService {
 
     // Retornamos el payload inyectado con los metadatos requeridos por la IA
     return '$basePrompt--- TEXTO ORIGINAL ---\n$originalText\n--- FIN TEXTO ORIGINAL ---';
+  }
+
+  /// Genera un prompt para resumir un documento PDF extraído
+  String generateSummaryPrompt({
+    required String documentTitle,
+    required String originalText,
+  }) {
+    return 'Actúa como un asistente de estudio experto. Resume el siguiente texto extraído del documento "$documentTitle" en un párrafo conciso y fácil de entender, destacando los puntos principales.\n\n--- TEXTO ---\n$originalText\n--- FIN TEXTO ---';
+  }
+
+  /// Método simulado de conexión con IA para obtener el resumen.
+  /// Aquí debes conectar tu endpoint real (OpenAI, Gemini, Claude, etc).
+  Future<String> getResumen(String title, String text) async {
+    final prompt = generateSummaryPrompt(
+      documentTitle: title,
+      originalText: text,
+    );
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_geminiApiKey',
+    );
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
+            {
+              "parts": [
+                {"text": prompt},
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final generatedText =
+            data['candidates'][0]['content']['parts'][0]['text'];
+        return '✨ Resumen de la IA:\n\n$generatedText';
+      } else {
+        return 'Error al consultar la IA. Código: ${response.statusCode}\nDetalles: ${response.body}';
+      }
+    } catch (e) {
+      return 'No se pudo conectar con el servicio de IA. Verifica tu conexión a internet o tu API Key.\nError: $e';
+    }
   }
 }

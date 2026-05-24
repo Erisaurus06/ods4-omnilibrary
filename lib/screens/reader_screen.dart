@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:epub_view/epub_view.dart';
 import 'package:screen_brightness/screen_brightness.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import '../services/local_db_service.dart';
+import '../services/dictionary_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final String titulo;
@@ -106,15 +107,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   Future<void> _inicializarLectura() async {
-    // Leemos la última posición guardada antes de inicializar el documento
     if (widget.documentPath != null) {
-      final prefs = await SharedPreferences.getInstance();
-
       if (widget.isPdf) {
         _paginaGuardadaPdf =
-            prefs.getInt('pdf_page_${widget.documentPath}') ?? 1;
+            LocalDbService.obtenerProgreso('pdf_page_${widget.documentPath}') ??
+            1;
       } else if (widget.isEpub) {
-        _cfiGuardadoEpub = prefs.getString('epub_cfi_${widget.documentPath}');
+        _cfiGuardadoEpub = LocalDbService.obtenerProgreso(
+          'epub_cfi_${widget.documentPath}',
+        );
         final file = File(widget.documentPath!);
         if (file.existsSync()) {
           _epubController = EpubController(
@@ -160,9 +161,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         final cfi = _epubController!
             .generateEpubCfi(); // Obtiene posición exacta
         if (cfi != null) {
-          SharedPreferences.getInstance().then((prefs) {
-            prefs.setString('epub_cfi_${widget.documentPath}', cfi);
-          });
+          LocalDbService.guardarProgreso(
+            'epub_cfi_${widget.documentPath}',
+            cfi,
+          );
         }
       } catch (e) {
         print("No se pudo guardar el progreso del ePub: $e");
@@ -220,7 +222,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   // --- DICCIONARIO OFFLINE (SIMULADO) ---
-  void _mostrarDefinicion(String palabra) {
+  void _mostrarDefinicion(String palabra) async {
     if (palabra.isEmpty) return;
 
     // Limpiamos la palabra de signos de puntuación y la pasamos a minúsculas
@@ -229,21 +231,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         .toLowerCase()
         .trim();
 
-    // Base de datos local simulada. ¡Idealmente esto leería de tu Hive/SQLite!
-    final Map<String, String> diccionarioOffline = {
-      'educación':
-          'Formación destinada a desarrollar la capacidad intelectual, moral y afectiva de las personas.',
-      'información':
-          'Conjunto de datos, ya procesados y ordenados para su comprensión, que aportan nuevos conocimientos.',
-      'desarrollo':
-          'Evolución progresiva de una economía, sociedad o intelecto.',
-      'tecnología':
-          'Conjunto de teorías y de técnicas que permiten el aprovechamiento práctico del conocimiento científico.',
-    };
-
-    final definicion =
-        diccionarioOffline[palabraLimpia] ??
-        'Definición no encontrada en el diccionario offline para "$palabra".';
+    // Llamamos al servicio real para obtener la definición
+    String definicion = 'Buscando definición...';
+    try {
+      definicion = await DictionaryService.definirPalabra(palabraLimpia);
+    } catch (e) {
+      definicion = 'Error al consultar el diccionario online.';
+    }
 
     showDialog(
       context: context,
@@ -275,17 +269,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _guardarCita(String cita) async {
     if (cita.isEmpty) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    List<String> citas = prefs.getStringList('citas_favoritas') ?? [];
-
-    // Guardamos la cita agregando el título del libro o artículo de donde provino
     final nuevaCita = '«$cita»\n— ${widget.titulo}';
-    citas.insert(
-      0,
-      nuevaCita,
-    ); // Agregamos al principio para que las más nuevas salgan primero
-
-    await prefs.setStringList('citas_favoritas', citas);
+    await LocalDbService.guardarCita(nuevaCita);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -301,11 +286,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  Future<void> _mostrarCitasFavoritas() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    if (!mounted) return;
-
+  void _mostrarCitasFavoritas() {
     showModalBottomSheet(
       context: context,
       backgroundColor: _backgroundColor,
@@ -315,7 +296,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            List<String> citas = prefs.getStringList('citas_favoritas') ?? [];
+            List<String> citas = LocalDbService.obtenerCitas();
 
             return SafeArea(
               child: Container(
@@ -368,15 +349,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                   Icons.delete_outline,
                                   color: Colors.red[300],
                                 ),
-                                onPressed: () async {
-                                  citas.removeAt(index);
-                                  await prefs.setStringList(
-                                    'citas_favoritas',
-                                    citas,
-                                  );
-                                  setModalState(
-                                    () {},
-                                  ); // Actualiza la lista en tiempo real
+                                onPressed: () {
+                                  LocalDbService.eliminarCita(index);
+                                  setModalState(() {});
                                 },
                               ),
                             );
@@ -397,7 +372,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _mostrarAjustesAvanzados() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
@@ -416,6 +391,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       'Ajustes Avanzados',
                       style: TextStyle(
                         fontSize: 18,
+                        color: Theme.of(context).primaryColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -423,14 +399,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     // Control de Brillo Aislado (screen_brightness)
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.brightness_low_outlined,
-                          color: Colors.black87,
+                          color: Theme.of(context).primaryColor,
                         ),
                         Expanded(
                           child: Slider(
                             value: _brillo,
-                            activeColor: Colors.black,
+                            activeColor: Theme.of(context).primaryColor,
                             onChanged: (val) {
                               setModalState(() => _brillo = val);
                               setState(() => _brillo = val);
@@ -438,17 +414,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             },
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.brightness_high_outlined,
-                          color: Colors.black87,
+                          color: Theme.of(context).primaryColor,
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     // Modos de Animación y Vista
-                    const Text(
+                    Text(
                       'Modo de Visualización',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     SingleChildScrollView(
@@ -467,17 +446,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 child: ChoiceChip(
                                   label: Text(modo),
                                   selected: _modoVista == modo,
-                                  selectedColor: Colors.black87,
+                                  selectedColor: Theme.of(context).primaryColor,
                                   labelStyle: TextStyle(
                                     color: _modoVista == modo
                                         ? Colors.white
-                                        : Colors.black87,
+                                        : Theme.of(context).primaryColor,
                                   ),
-                                  backgroundColor: Colors.white,
+                                  backgroundColor: Theme.of(context).cardColor,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: const BorderSide(
-                                      color: Colors.black12,
+                                    side: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).dividerColor.withOpacity(0.2),
                                     ),
                                   ),
                                   onSelected: (sel) {
@@ -491,9 +472,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                     const SizedBox(height: 20),
                     // Control de Tipografía y Tamaño
-                    const Text(
+                    Text(
                       'Tipografía',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -501,20 +485,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             value: _fontFamily,
+                            dropdownColor: Theme.of(context).cardColor,
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                            ),
                             decoration: InputDecoration(
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: Colors.black12,
+                                borderSide: BorderSide(
+                                  color: Theme.of(
+                                    context,
+                                  ).dividerColor.withOpacity(0.2),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: Colors.black12,
+                                borderSide: BorderSide(
+                                  color: Theme.of(
+                                    context,
+                                  ).dividerColor.withOpacity(0.2),
                                 ),
                               ),
                             ),
@@ -538,13 +530,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         const SizedBox(width: 16),
                         Container(
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.black12),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).dividerColor.withOpacity(0.2),
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.remove),
+                                icon: Icon(
+                                  Icons.remove,
+                                  color: Theme.of(context).primaryColor,
+                                ),
                                 onPressed: () {
                                   setModalState(
                                     () => _fontSize = (_fontSize > 12)
@@ -558,9 +557,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                   );
                                 },
                               ),
-                              Text('${_fontSize.toInt()}'),
+                              Text(
+                                '${_fontSize.toInt()}',
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                              ),
                               IconButton(
-                                icon: const Icon(Icons.add),
+                                icon: Icon(
+                                  Icons.add,
+                                  color: Theme.of(context).primaryColor,
+                                ),
                                 onPressed: () {
                                   setModalState(
                                     () => _fontSize = (_fontSize < 32)
@@ -820,9 +827,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           if (_paginaGuardadaPdf > 1)
             _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
         },
-        onPageChanged: (PdfPageChangedDetails details) async {
-          final prefs = await SharedPreferences.getInstance();
-          prefs.setInt(
+        onPageChanged: (PdfPageChangedDetails details) {
+          LocalDbService.guardarProgreso(
             'pdf_page_${widget.documentPath}',
             details.newPageNumber,
           );
@@ -839,9 +845,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         if (_paginaGuardadaPdf > 1)
           _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
       },
-      onPageChanged: (PdfPageChangedDetails details) async {
-        final prefs = await SharedPreferences.getInstance();
-        prefs.setInt('pdf_page_${widget.documentPath}', details.newPageNumber);
+      onPageChanged: (PdfPageChangedDetails details) {
+        LocalDbService.guardarProgreso(
+          'pdf_page_${widget.documentPath}',
+          details.newPageNumber,
+        );
       },
     );
   }

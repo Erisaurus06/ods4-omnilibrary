@@ -1,3 +1,5 @@
 {
-    "cmake.sourceDirectory": "C:/Users/coron/omnilibrary/linux"
+    "cmake.sourceDirectory": "C:/Users/coron/omnilibrary/linux",
+    "commentTranslate.source": "Google",
+    "commentTranslate.multiLineMerge": false
 }

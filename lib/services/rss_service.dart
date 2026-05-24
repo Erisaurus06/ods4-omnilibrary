@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'package:dart_rss/dart_rss.dart';
+import 'local_db_service.dart';
 
 class RssService {
   /// Obtiene un flujo dinámico de noticias desde Google News basado en una categoría.
@@ -24,15 +25,21 @@ class RssService {
         },
       );
       if (response.statusCode == 200) {
-        return RssFeed.parse(
-          response.body,
-        ); // dart_rss procesa el XML nativamente
+        await LocalDbService.guardarNoticias(categoria, response.body);
+        return RssFeed.parse(response.body);
       } else {
         print('Error en Google News RSS: Código HTTP ${response.statusCode}');
       }
     } catch (e) {
       print('Error obteniendo noticias de Google News: $e');
     }
+
+    final cachedXml = LocalDbService.obtenerNoticias(categoria);
+    if (cachedXml != null) {
+      print('Cargando noticias desde caché local.');
+      return RssFeed.parse(cachedXml);
+    }
+
     return null;
   }
 }

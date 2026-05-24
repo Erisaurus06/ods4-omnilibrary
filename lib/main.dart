@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'providers/theme_provider.dart';
+import 'providers/library_provider.dart';
+import 'providers/news_provider.dart';
+import 'providers/explore_provider.dart';
 import 'services/local_db_service.dart';
 
 void main() async {
@@ -10,9 +13,13 @@ void main() async {
   await LocalDbService.init();
 
   runApp(
-    // Envolvemos toda la aplicación en el Provider para el cambio de temas
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LibraryProvider()),
+        ChangeNotifierProvider(create: (_) => NewsProvider()),
+        ChangeNotifierProvider(create: (_) => ExploreProvider()),
+      ],
       child: const OmniLibraryApp(),
     ),
   );
