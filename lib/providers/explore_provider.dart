@@ -2,28 +2,63 @@ import 'package:flutter/material.dart';
 import '../services/wikipedia_service.dart';
 
 class ExploreProvider extends ChangeNotifier {
+  // Estado para Wikipedia
   String _busquedaActual = 'Objetivos de Desarrollo Sostenible';
-  bool _isLoading = false;
-  List<dynamic> _resultados = [];
+  bool _isLoadingWikipedia = false;
+  List<dynamic> _resultadosWikipedia = [];
 
+  // Estado para Libros (Open Library)
+  bool _isLoadingLibros = false;
+  String _disciplinaActiva = 'Ciencias';
+  List<dynamic> _librosActuales = [];
+
+  // Getters para la interfaz
   String get busquedaActual => _busquedaActual;
-  bool get isLoading => _isLoading;
-  List<dynamic> get resultados => _resultados;
+  bool get isLoadingWikipedia => _isLoadingWikipedia;
+  List<dynamic> get resultados => _resultadosWikipedia;
+
+  bool get isLoadingLibros => _isLoadingLibros;
+  String get disciplinaActiva => _disciplinaActiva;
+  List<dynamic> get librosActuales => _librosActuales;
 
   ExploreProvider() {
-    buscar(_busquedaActual);
+    buscarWikipedia(_busquedaActual);
+    cargarLibrosPorDisciplina(_disciplinaActiva);
   }
 
-  Future<void> buscar(String query) async {
+  // --- Lógica Wikipedia ---
+  Future<void> buscarWikipedia(String query) async {
     if (query.trim().isEmpty) return;
-
     _busquedaActual = query;
-    _isLoading = true;
+    _isLoadingWikipedia = true;
     notifyListeners();
 
-    _resultados = await WikipediaService.buscarArticulos(_busquedaActual);
+    _resultadosWikipedia = await WikipediaService.buscarArticulos(
+      _busquedaActual,
+    );
 
-    _isLoading = false;
+    _isLoadingWikipedia = false;
+    notifyListeners();
+  }
+
+  // --- Lógica Open Library ---
+  Future<void> cargarLibrosPorDisciplina(String disciplina) async {
+    _isLoadingLibros = true;
+    _disciplinaActiva = disciplina;
+    notifyListeners();
+
+    try {
+      // final query =
+      //     OpenLibraryService.rutasEducativas[disciplina] ?? disciplina;
+      // final libros = await OpenLibraryService.buscarLibros(query);
+
+      _librosActuales = []; // Placeholder as OpenLibraryService is missing
+    } catch (e) {
+      debugPrint('Error al conectar con la biblioteca global: $e');
+      _librosActuales = [];
+    }
+
+    _isLoadingLibros = false;
     notifyListeners();
   }
 }

@@ -35,6 +35,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_animate: ^4.5.2
+  flutter_dotenv: ^6.0.1
   flutter_tts: ^4.2.5
   google_sign_in: any
   googleapis: any
@@ -47,6 +48,7 @@ dependencies:
   provider: ^6.1.1
   screen_brightness: any
   shared_preferences: ^2.2.2
+  supabase_flutter: ^2.12.4
   syncfusion_flutter_pdfviewer: any
   url_launcher: ^6.2.6
 
@@ -102,3 +104,5 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  assets:
+    - .env

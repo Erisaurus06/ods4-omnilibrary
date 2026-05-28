@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -39,10 +40,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   // Nuevos estados para funcionalidades avanzadas
   double _brillo = 1.0;
-  String _modoVista =
-      'Lineal'; // Modos: Lineal, Libre, Manga, Dos Hojas, Desparramado
+  String _modoVista = 'Vertical (Arriba/Abajo)'; // Opciones actualizadas
   bool _modoTraduccion = false;
   String _fontFamily = 'System'; // Tipografía activa
+
+  // Nuevas variables para herramientas y temporizador
+  Timer? _readingTimer;
+  int _timerMinutes = 0;
+  Color _highlightColor = Colors.yellow;
+  bool _drawMode = false;
+  bool _noteMode = false;
 
   // --- NUEVAS VARIABLES PARA EL PROGRESO ---
   final PdfViewerController _pdfViewerController = PdfViewerController();
@@ -118,8 +125,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
         final file = File(widget.documentPath!);
         if (file.existsSync()) {
+          final epubBytes = await file.readAsBytes();
           _epubController = EpubController(
-            document: EpubDocument.openFile(file),
+            document: EpubDocument.openData(epubBytes),
             epubCfi:
                 _cfiGuardadoEpub, // ePubView soporta abrir directo en una posición
           );
@@ -139,13 +147,70 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _brillo = currentBrightness;
       });
     } catch (e) {
-      print('No se pudo obtener el brillo de la pantalla: $e');
+      print('No se pudo obtener el brillo de la pantalla: $e\n');
+    }
+  }
+
+  void _iniciarTemporizador(int minutos) {
+    _readingTimer?.cancel();
+    setState(() => _timerMinutes = minutos);
+
+    if (minutos > 0) {
+      _readingTimer = Timer(Duration(minutes: minutos), () {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: Theme.of(context).cardColor,
+              title: Text(
+                '¡Tiempo cumplido!',
+                style: TextStyle(color: Theme.of(context).primaryColor),
+              ),
+              content: Text(
+                'Tu temporizador de lectura de $minutos minutos ha finalizado.',
+                style: TextStyle(
+                  color: Theme.of(context).primaryColor.withOpacity(0.8),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Aceptar'),
+                ),
+              ],
+            ),
+          );
+          setState(() => _timerMinutes = 0);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Temporizador programado: $minutos min.',
+            style: TextStyle(color: Theme.of(context).primaryColor),
+          ),
+          backgroundColor: Theme.of(context).cardColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Temporizador desactivado.',
+            style: TextStyle(color: Theme.of(context).primaryColor),
+          ),
+          backgroundColor: Theme.of(context).cardColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
     ScreenBrightness().resetScreenBrightness();
+    _readingTimer?.cancel();
     _flutterTts.stop(); // Detenemos la voz si el usuario cierra el lector
     _guardarProgresoEpub(); // Guardamos el ePub justo al salir
     _epubController?.dispose();
@@ -368,231 +433,461 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // Menú inferior avanzado
+  // Menú inferior avanzado (Con soporte 100% para Modo Oscuro)
   void _mostrarAjustesAvanzados() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
+      isScrollControlled: true, // Para permitir que sea más alto
+      backgroundColor: Colors.transparent, // Usamos Container interno
       builder: (context) {
         return StatefulBuilder(
-          // StatefulBuilder para actualizar el Modal
           builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ajustes Avanzados',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Theme.of(context).primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
+            final primaryColor = Theme.of(context).primaryColor;
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (_, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
                     ),
-                    const SizedBox(height: 20),
-                    // Control de Brillo Aislado (screen_brightness)
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.brightness_low_outlined,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _brillo,
-                            activeColor: Theme.of(context).primaryColor,
-                            onChanged: (val) {
-                              setModalState(() => _brillo = val);
-                              setState(() => _brillo = val);
-                              ScreenBrightness().setScreenBrightness(val);
-                            },
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(24.0),
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          margin: const EdgeInsets.only(bottom: 24),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        Icon(
-                          Icons.brightness_high_outlined,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    // Modos de Animación y Vista
-                    Text(
-                      'Modo de Visualización',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
+                      Text(
+                        'Ajustes de Lectura',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // --- TEMPORIZADOR ---
+                      _buildSectionTitle(
+                        'Temporizador de Lectura (Minutos)',
+                        primaryColor,
+                      ),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [0, 15, 30, 45, 60, 120].map((min) {
+                            final isSelected = _timerMinutes == min;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: ChoiceChip(
+                                label: Text(min == 0 ? 'Apagado' : '$min'),
+                                selected: isSelected,
+                                selectedColor: primaryColor,
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? Theme.of(context).cardColor
+                                      : primaryColor,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onSelected: (val) {
+                                  setModalState(() {});
+                                  _iniciarTemporizador(min);
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      // --- ORIENTACIÓN ---
+                      _buildSectionTitle(
+                        'Orientación de Lectura',
+                        primaryColor,
+                      ),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
                         children:
                             [
-                              'Lineal (Scroll)',
-                              'Libre (Páginas)',
-                              'Manga (R to L)',
-                              'Dos Hojas',
-                              'Desparramado',
+                              'Vertical (Arriba/Abajo)',
+                              'Horizontal (Izq/Der)',
+                              'Dos Páginas',
+                              'Manga (Der/Izq)',
                             ].map((modo) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: ChoiceChip(
-                                  label: Text(modo),
-                                  selected: _modoVista == modo,
-                                  selectedColor: Theme.of(context).primaryColor,
-                                  labelStyle: TextStyle(
-                                    color: _modoVista == modo
-                                        ? Colors.white
-                                        : Theme.of(context).primaryColor,
-                                  ),
-                                  backgroundColor: Theme.of(context).cardColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).dividerColor.withOpacity(0.2),
-                                    ),
-                                  ),
-                                  onSelected: (sel) {
-                                    setModalState(() => _modoVista = modo);
-                                    setState(() => _modoVista = modo);
-                                  },
+                              return ChoiceChip(
+                                label: Text(modo),
+                                selected: _modoVista == modo,
+                                selectedColor: primaryColor,
+                                labelStyle: TextStyle(
+                                  color: _modoVista == modo
+                                      ? Theme.of(context).cardColor
+                                      : primaryColor,
                                 ),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onSelected: (sel) {
+                                  setModalState(() => _modoVista = modo);
+                                  setState(() => _modoVista = modo);
+                                },
                               );
                             }).toList(),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Control de Tipografía y Tamaño
-                    Text(
-                      'Tipografía',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor,
+                      const SizedBox(height: 28),
+                      // --- HERRAMIENTAS (MARCATEXTOS, DIBUJO, NOTAS) ---
+                      _buildSectionTitle(
+                        'Herramientas de Anotación',
+                        primaryColor,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _fontFamily,
-                            dropdownColor: Theme.of(context).cardColor,
-                            style: TextStyle(
-                              color: Theme.of(context).primaryColor,
-                            ),
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Theme.of(
-                                    context,
-                                  ).dividerColor.withOpacity(0.2),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Theme.of(
-                                    context,
-                                  ).dividerColor.withOpacity(0.2),
-                                ),
-                              ),
-                            ),
-                            items:
-                                ['System', 'Serif', 'Sans Serif', 'Monospace']
-                                    .map(
-                                      (f) => DropdownMenuItem(
-                                        value: f,
-                                        child: Text(f),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setModalState(() => _fontFamily = val);
-                                setState(() => _fontFamily = val);
-                              }
-                            },
-                          ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        const SizedBox(width: 16),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(
-                                context,
-                              ).dividerColor.withOpacity(0.2),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _ToolButton(
+                                  icon: Icons.border_color_outlined,
+                                  label: 'Resaltar',
+                                  isActive:
+                                      _highlightColor != Colors.transparent &&
+                                      !_drawMode &&
+                                      !_noteMode,
+                                  onTap: () {
+                                    setModalState(() {
+                                      _drawMode = false;
+                                      _noteMode = false;
+                                      if (_highlightColor == Colors.transparent)
+                                        _highlightColor = Colors.yellow;
+                                    });
+                                    setState(() {});
+                                  },
+                                ),
+                                _ToolButton(
+                                  icon: Icons.draw_outlined,
+                                  label: 'Dibujar',
+                                  isActive: _drawMode,
+                                  onTap: () {
+                                    setModalState(() {
+                                      _drawMode = !_drawMode;
+                                      if (_drawMode) {
+                                        _noteMode = false;
+                                        _highlightColor = Colors.transparent;
+                                      }
+                                    });
+                                    setState(() {});
+                                  },
+                                ),
+                                _ToolButton(
+                                  icon: Icons.sticky_note_2_outlined,
+                                  label: 'Post-it',
+                                  isActive: _noteMode,
+                                  onTap: () {
+                                    setModalState(() {
+                                      _noteMode = !_noteMode;
+                                      if (_noteMode) {
+                                        _drawMode = false;
+                                        _highlightColor = Colors.transparent;
+                                      }
+                                    });
+                                    setState(() {});
+                                  },
+                                ),
+                              ],
                             ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  Icons.remove,
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                                onPressed: () {
-                                  setModalState(
-                                    () => _fontSize = (_fontSize > 12)
-                                        ? _fontSize - 2
-                                        : 12,
-                                  );
-                                  setState(
-                                    () => _fontSize = (_fontSize > 12)
-                                        ? _fontSize - 2
-                                        : 12,
-                                  );
-                                },
+                            if (_highlightColor != Colors.transparent &&
+                                !_drawMode &&
+                                !_noteMode) ...[
+                              Divider(
+                                height: 32,
+                                color: Theme.of(context).dividerColor,
                               ),
-                              Text(
-                                '${_fontSize.toInt()}',
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.add,
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                                onPressed: () {
-                                  setModalState(
-                                    () => _fontSize = (_fontSize < 32)
-                                        ? _fontSize + 2
-                                        : 32,
-                                  );
-                                  setState(
-                                    () => _fontSize = (_fontSize < 32)
-                                        ? _fontSize + 2
-                                        : 32,
-                                  );
-                                },
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children:
+                                    [
+                                      Colors.yellow,
+                                      Colors.greenAccent,
+                                      Colors.lightBlueAccent,
+                                      Colors.pinkAccent,
+                                      Colors.purpleAccent,
+                                    ].map((color) {
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setModalState(
+                                            () => _highlightColor = color,
+                                          );
+                                          setState(
+                                            () => _highlightColor = color,
+                                          );
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          width: 34,
+                                          height: 34,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: _highlightColor == color
+                                                  ? primaryColor
+                                                  : Colors.transparent,
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                      ),
+                      const SizedBox(height: 28),
+                      // --- TIPOGRAFÍA Y TAMAÑO ---
+                      _buildSectionTitle('Texto y Fuente', primaryColor),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.font_download_outlined,
+                                  color: primaryColor,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _fontFamily,
+                                      dropdownColor: Theme.of(
+                                        context,
+                                      ).cardColor,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontSize: 16,
+                                      ),
+                                      isExpanded: true,
+                                      items:
+                                          [
+                                                'System',
+                                                'Serif',
+                                                'Sans Serif',
+                                                'Monospace',
+                                                'Dyslexic',
+                                              ]
+                                              .map(
+                                                (f) => DropdownMenuItem(
+                                                  value: f,
+                                                  child: Text(f),
+                                                ),
+                                              )
+                                              .toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setModalState(
+                                            () => _fontFamily = val,
+                                          );
+                                          setState(() => _fontFamily = val);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Divider(
+                              height: 24,
+                              color: Theme.of(context).dividerColor,
+                            ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.text_fields,
+                                  color: primaryColor,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Slider(
+                                    value: _fontSize,
+                                    min: 12,
+                                    max: 32,
+                                    activeColor: primaryColor,
+                                    inactiveColor: primaryColor.withOpacity(
+                                      0.2,
+                                    ),
+                                    onChanged: (val) {
+                                      setModalState(() => _fontSize = val);
+                                      setState(() => _fontSize = val);
+                                    },
+                                  ),
+                                ),
+                                Text(
+                                  '${_fontSize.toInt()}',
+                                  style: TextStyle(
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      // --- PANTALLA Y BRILLO ---
+                      _buildSectionTitle('Pantalla', primaryColor),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.brightness_low_outlined,
+                                  color: primaryColor,
+                                ),
+                                Expanded(
+                                  child: Slider(
+                                    value: _brillo,
+                                    activeColor: primaryColor,
+                                    inactiveColor: primaryColor.withOpacity(
+                                      0.2,
+                                    ),
+                                    onChanged: (val) {
+                                      setModalState(() => _brillo = val);
+                                      setState(() => _brillo = val);
+                                      ScreenBrightness().setScreenBrightness(
+                                        val,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.brightness_high_outlined,
+                                  color: primaryColor,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Temas de Fondo',
+                              style: TextStyle(
+                                color: primaryColor.withOpacity(0.6),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _ColorThemeSelector(
+                                  color: const Color(0xFFFFFFFF),
+                                  name: 'Blanco',
+                                  isSelected:
+                                      _backgroundColor ==
+                                      const Color(0xFFFFFFFF),
+                                  onTap: () {
+                                    setModalState(() {});
+                                    _cambiarTema('Blanco');
+                                  },
+                                ),
+                                _ColorThemeSelector(
+                                  color: const Color(0xFFFBF0D9),
+                                  name: 'Sepia',
+                                  isSelected:
+                                      _backgroundColor ==
+                                      const Color(0xFFFBF0D9),
+                                  onTap: () {
+                                    setModalState(() {});
+                                    _cambiarTema('Amarillo');
+                                  },
+                                ),
+                                _ColorThemeSelector(
+                                  color: const Color(0xFF000000),
+                                  name: 'Noche',
+                                  isSelected:
+                                      _backgroundColor ==
+                                      const Color(0xFF000000),
+                                  onTap: () {
+                                    setModalState(() {});
+                                    _cambiarTema('Negro');
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                );
+              },
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildSectionTitle(String title, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color.withOpacity(0.5),
+          letterSpacing: 1.0,
+        ),
+      ),
     );
   }
 
@@ -788,6 +1083,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   );
 
+                  // Insertamos nuestro botón de "Resaltar" y "Notas"
+                  buttonItems.insert(
+                    2,
+                    ContextMenuButtonItem(
+                      label: '🖍️ Resaltar',
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Texto resaltado.',
+                              style: TextStyle(
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                            backgroundColor: Theme.of(context).cardColor,
+                          ),
+                        );
+                      },
+                    ),
+                  );
+
                   return AdaptiveTextSelectionToolbar.buttonItems(
                     anchors: editableTextState.contextMenuAnchors,
                     buttonItems: buttonItems,
@@ -805,12 +1122,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     PdfScrollDirection scrollDirection = PdfScrollDirection.vertical;
     PdfPageLayoutMode pageLayoutMode = PdfPageLayoutMode.continuous;
 
-    if (_modoVista == 'Libre (Páginas)') {
-      pageLayoutMode = PdfPageLayoutMode.single;
-    } else if (_modoVista == 'Manga (R to L)' ||
-        _modoVista == 'Dos Hojas' ||
-        _modoVista == 'Desparramado') {
-      // El modo Manga y Dos hojas típicamente utilizan un desplazamiento horizontal paginado
+    if (_modoVista == 'Horizontal (Izq/Der)' ||
+        _modoVista == 'Dos Páginas' ||
+        _modoVista == 'Manga (Der/Izq)') {
       scrollDirection = PdfScrollDirection.horizontal;
       pageLayoutMode = PdfPageLayoutMode.single;
     }
@@ -889,6 +1203,112 @@ class _ColorButton extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
         ),
+      ),
+    );
+  }
+}
+
+// --- NUEVOS WIDGETS AUXILIARES PARA AJUSTES AVANZADOS ---
+class _ColorThemeSelector extends StatelessWidget {
+  final Color color;
+  final String name;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ColorThemeSelector({
+    required this.color,
+    required this.name,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected
+                    ? Theme.of(context).primaryColor
+                    : Colors.grey.withOpacity(0.3),
+                width: isSelected ? 3 : 1,
+              ),
+              boxShadow: [
+                if (isSelected)
+                  BoxShadow(
+                    color: Theme.of(context).primaryColor.withOpacity(0.2),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: Theme.of(context).primaryColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ToolButton({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? primaryColor.withOpacity(0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: isActive ? primaryColor : primaryColor.withOpacity(0.5),
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              color: isActive ? primaryColor : primaryColor.withOpacity(0.5),
+            ),
+          ),
+        ],
       ),
     );
   }

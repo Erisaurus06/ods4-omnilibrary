@@ -16,6 +16,8 @@ import 'dart:io';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../services/ai_translation_service.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../services/supabase_service.dart';
+import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/google_search_service.dart';
@@ -41,89 +43,103 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody:
+          true, // Esto permite que el contenido pase por debajo del menú para revelar el desenfoque
       body: IndexedStack(index: _indiceActual, children: _pantallas),
       // --- BARRA DE NAVEGACIÓN PREMIUM ---
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
+      bottomNavigationBar: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: 25, // Desenfoque más profundo estilo iOS
+            sigmaY: 25,
+          ), // El nivel de desenfoque
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).cardColor.withOpacity(0.65), // Color semi-transparente
+              border: Border(
+                top: BorderSide(
+                  color: Colors.grey.withOpacity(0.2),
+                  width: 0.5,
+                ), // Reflejo del cristal superior
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: BottomNavigationBar(
-              currentIndex: _indiceActual,
-              elevation: 0,
-              onTap: (indice) {
-                HapticFeedback.lightImpact(); // Vibración sutil premium
-                setState(() => _indiceActual = indice);
-              },
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.transparent,
-              selectedItemColor: Theme.of(context).primaryColor,
-              unselectedItemColor: Colors.grey[400],
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              selectedLabelStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 4.0,
+                ),
+                child: BottomNavigationBar(
+                  currentIndex: _indiceActual,
+                  elevation: 0,
+                  onTap: (indice) {
+                    HapticFeedback.lightImpact(); // Vibración sutil premium
+                    setState(() => _indiceActual = indice);
+                  },
+                  type: BottomNavigationBarType.fixed,
+                  backgroundColor: Colors.transparent,
+                  selectedItemColor: Theme.of(context).primaryColor,
+                  unselectedItemColor: Colors.grey[400],
+                  showSelectedLabels: true,
+                  showUnselectedLabels: true,
+                  selectedLabelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  items: const [
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.explore_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.explore),
+                      ),
+                      label: 'Explorar',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.newspaper_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.newspaper),
+                      ),
+                      label: 'Noticias',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.book_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.book),
+                      ),
+                      label: 'Biblioteca',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.settings_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.settings),
+                      ),
+                      label: 'Ajustes',
+                    ),
+                  ],
+                ),
               ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.explore_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.explore),
-                  ),
-                  label: 'Explorar',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.newspaper_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.newspaper),
-                  ),
-                  label: 'Noticias',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.book_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.book),
-                  ),
-                  label: 'Biblioteca',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.settings_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Icon(Icons.settings),
-                  ),
-                  label: 'Ajustes',
-                ),
-              ],
             ),
           ),
         ),
@@ -133,6 +149,70 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // --- SECCIÓN 4: AJUSTES (Configuración y APIs) ---
+
+void _mostrarVincularGoogleBooks(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Theme.of(context).cardColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.library_books, size: 60, color: Colors.blue[400]),
+            const SizedBox(height: 16),
+            Text(
+              'Vincular Google Play Books',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Al vincular tu cuenta, OmniLibrary podrá acceder a tus libros comprados y ePubs sincronizados usando la API oficial de Google Books OAuth 2.0.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).primaryColor.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[600],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.login),
+                label: const Text('Autenticar con Google'),
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Simulando conexión segura OAuth...'),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _SeccionAjustes extends StatefulWidget {
   const _SeccionAjustes();
 
@@ -149,65 +229,224 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Configuración'), centerTitle: false),
+      appBar: AppBar(
+        title: const Text(
+          'Configuración',
+          style: TextStyle(
+            fontSize: 34, // Large Title de iOS
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.2,
+          ),
+        ),
+        centerTitle: false,
+        toolbarHeight: 80,
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
         children: [
-          const Text(
-            'Apariencia',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.5,
+          // --- 1. CUENTA ---
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'CUENTA',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          const SizedBox(height: 16),
-          _SwitchTile(
-            titulo: 'Modo Oscuro',
-            subtitulo: 'Cambia el tema de la aplicación',
-            icono: Icons.dark_mode_outlined,
-            valor: themeProvider.isDarkMode,
-            onChanged: (val) =>
-                themeProvider.toggleTheme(val), // Cambia globalmente
-          ),
-          const SizedBox(height: 12),
-          _SwitchTile(
-            titulo: 'Modo Lectura',
-            subtitulo: 'Optimiza el contraste y la tipografía',
-            icono: Icons.menu_book_outlined,
-            valor: _modoLectura,
-            onChanged: (val) => setState(() => _modoLectura = val),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                _ActionTile(
+                  titulo: 'Cerrar Sesión',
+                  icono: Icons.person,
+                  colorIcono: Colors.redAccent,
+                  trailingText:
+                      SupabaseService.client.auth.currentUser?.email ??
+                      'Usuario',
+                  onTap: () async {
+                    await SupabaseService.client.auth.signOut();
+                  },
+                ),
+                Divider(
+                  height: 1,
+                  indent: 50,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                _ActionTile(
+                  titulo: 'Sincronización en la Nube',
+                  icono: Icons.cloud_sync,
+                  colorIcono: Colors.indigo,
+                  onTap: () {},
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 36),
-          const Text(
-            'Integraciones y APIs',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.5,
+          // --- 2. APARIENCIA ---
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'APARIENCIA',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          const SizedBox(height: 16),
-          const _ApiTile(
-            titulo: 'Wikipedia API',
-            subtitulo: 'Conectado para búsquedas globales',
-            icono: Icons.language,
-            conectado: true,
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(
+                10,
+              ), // Radio Inset Grouped nativo
+            ),
+            child: Column(
+              children: [
+                _SwitchTile(
+                  titulo: 'Modo Oscuro',
+                  subtitulo: 'Cambia el tema de la aplicación',
+                  icono: Icons.dark_mode_outlined,
+                  valor: themeProvider.isDarkMode,
+                  onChanged: (val) => themeProvider.toggleTheme(val),
+                ),
+                Divider(
+                  height: 1,
+                  indent: 64,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                _SwitchTile(
+                  titulo: 'Modo Lectura',
+                  subtitulo: 'Optimiza el contraste y la tipografía',
+                  icono: Icons.menu_book_outlined,
+                  valor: _modoLectura,
+                  onChanged: (val) => setState(() => _modoLectura = val),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          const _ApiTile(
-            titulo: 'Noticias RSS',
-            subtitulo: 'Fuente de actualidad configurada',
-            icono: Icons.rss_feed,
-            conectado: true,
+          const SizedBox(height: 36),
+          // --- 3. INTEGRACIONES Y APIS ---
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'INTEGRACIONES Y APIS',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
           ),
-          const SizedBox(height: 12),
-          const _ApiTile(
-            titulo: 'Google Play Books',
-            subtitulo: 'Requiere autenticación',
-            icono: Icons.library_books_outlined,
-            conectado: false,
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                const _ApiTile(
+                  titulo: 'Wikipedia API',
+                  subtitulo: 'Búsquedas globales',
+                  icono: Icons.language,
+                  conectado: true,
+                ),
+                Divider(
+                  height: 1,
+                  indent: 64,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                const _ApiTile(
+                  titulo: 'Noticias RSS',
+                  subtitulo: 'Actualidad',
+                  icono: Icons.rss_feed,
+                  conectado: true,
+                ),
+                Divider(
+                  height: 1,
+                  indent: 64,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                _ApiTile(
+                  titulo: 'Google Play Books',
+                  subtitulo: 'Autenticación',
+                  icono: Icons.library_books_outlined,
+                  conectado: false,
+                  onTap: () => _mostrarVincularGoogleBooks(context),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 36),
+          // --- 4. ALMACENAMIENTO Y DATOS ---
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'ALMACENAMIENTO Y DATOS',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                _ActionTile(
+                  titulo: 'Gestionar Almacenamiento',
+                  icono: Icons.storage,
+                  colorIcono: Colors.green,
+                  trailingText: '1.2 GB',
+                  onTap: () {},
+                ),
+                Divider(
+                  height: 1,
+                  indent: 50,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                _ActionTile(
+                  titulo: 'Borrar Caché Local',
+                  icono: Icons.delete_sweep,
+                  colorIcono: Colors.red,
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 36),
+          // --- 5. ACERCA DE ---
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'ACERCA DE',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                _ActionTile(
+                  titulo: 'Versión de la App',
+                  icono: Icons.info_outline,
+                  colorIcono: Colors.orange,
+                  trailingText: '1.0.0',
+                  onTap: () {},
+                ),
+                Divider(
+                  height: 1,
+                  indent: 50,
+                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                ),
+                _ActionTile(
+                  titulo: 'Términos y Privacidad',
+                  icono: Icons.shield_outlined,
+                  colorIcono: Colors.blueGrey,
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -231,36 +470,35 @@ class _SwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    return SwitchListTile.adaptive(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      activeColor: Theme.of(context).primaryColor,
+      title: Text(
+        titulo,
+        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
       ),
-      child: SwitchListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        activeColor: Theme.of(context).primaryColor,
-        title: Text(
-          titulo,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+      subtitle: Text(
+        subtitulo,
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(context).primaryColor.withOpacity(0.6),
         ),
-        subtitle: Text(
-          subtitulo,
-          style: TextStyle(
-            fontSize: 13,
-            color: Theme.of(context).primaryColor.withOpacity(0.6),
-          ),
-        ),
-        secondary: Icon(icono, color: Theme.of(context).primaryColor),
-        value: valor,
-        onChanged: onChanged,
       ),
+      secondary: Container(
+        // Cuadro redondeado estilo Apple Settings
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).primaryColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icono,
+          color: Theme.of(context).scaffoldBackgroundColor,
+          size: 20,
+        ),
+      ),
+      value: valor,
+      onChanged: onChanged,
     );
   }
 }
@@ -270,62 +508,92 @@ class _ApiTile extends StatelessWidget {
   final String subtitulo;
   final IconData icono;
   final bool conectado;
+  final VoidCallback? onTap; // NUEVO: Permite hacer clic en la API
 
   const _ApiTile({
     required this.titulo,
     required this.subtitulo,
     required this.icono,
     required this.conectado,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: conectado ? primaryColor : Colors.grey[400],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icono,
+          color: Theme.of(context).scaffoldBackgroundColor,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        titulo,
+        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+      ),
+      subtitle: Text(
+        subtitulo,
+        style: TextStyle(fontSize: 13, color: primaryColor.withOpacity(0.6)),
+      ),
+      trailing: Icon(Icons.chevron_right, color: Colors.grey.withOpacity(0.5)),
+      onTap: onTap,
+    );
+  }
+}
+
+// --- NUEVO TILE ESTILO iOS PARA ACCIONES GLOBALES ---
+class _ActionTile extends StatelessWidget {
+  final String titulo;
+  final IconData icono;
+  final Color colorIcono;
+  final String? trailingText;
+  final VoidCallback onTap;
+
+  const _ActionTile({
+    required this.titulo,
+    required this.icono,
+    required this.colorIcono,
+    this.trailingText,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: colorIcono,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icono, color: Colors.white, size: 20),
+      ),
+      title: Text(
+        titulo,
+        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (trailingText != null)
+            Text(
+              trailingText!,
+              style: const TextStyle(color: Colors.grey, fontSize: 15),
+            ),
+          if (trailingText != null) const SizedBox(width: 4),
+          Icon(Icons.chevron_right, color: Colors.grey.withOpacity(0.5)),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Icon(
-          icono,
-          color: conectado ? primaryColor : primaryColor.withOpacity(0.3),
-          size: 28,
-        ),
-        title: Text(
-          titulo,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          subtitulo,
-          style: TextStyle(fontSize: 13, color: primaryColor.withOpacity(0.6)),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: conectado ? primaryColor : primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            conectado ? 'Conectado' : 'Vincular',
-            style: TextStyle(
-              color: conectado
-                  ? Theme.of(context).scaffoldBackgroundColor
-                  : primaryColor.withOpacity(0.6),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
+      onTap: onTap,
     );
   }
 }
@@ -393,9 +661,9 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
           const Text(
             '¿Qué quieres\naprender hoy?',
             style: TextStyle(
-              fontSize: 34,
+              fontSize: 32, // Título largo estilo LargeTitle de iOS
               fontWeight: FontWeight.w800,
-              letterSpacing: -1.2,
+              letterSpacing: -1.5, // SF Pro Display negativo
               height: 1.1,
             ),
           ),
@@ -452,7 +720,7 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                               'http:',
                               'https:',
                             ),
-                            url: volumeInfo['infoLink'],
+                            articleUrl: volumeInfo['infoLink'],
                           ),
                         );
                       }).toList(),
@@ -476,7 +744,7 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                             fuente: 'Web (Académica)',
                             tiempoLectura: 'PDF',
                             contenido: pdf['snippet'] ?? '',
-                            url: pdf['link'],
+                            articleUrl: pdf['link'],
                           ),
                         );
                       }).toList(),
@@ -499,7 +767,7 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                             contenido:
                                 (wiki['snippet'] ?? '') +
                                 '\n\n(Toca para leer completo en la web)',
-                            url:
+                            articleUrl:
                                 'https://es.wikipedia.org/wiki/${Uri.encodeComponent(wiki['title'])}',
                           ),
                         );
@@ -555,24 +823,26 @@ class _BuscadorUniversalState extends State<_BuscadorUniversal> {
           },
         ),
         filled: true,
-        fillColor: Theme.of(context).primaryColor.withOpacity(0.04),
+        fillColor: Theme.of(
+          context,
+        ).primaryColor.withOpacity(0.06), // Fondo de búsqueda iOS (gris tenue)
         contentPadding: const EdgeInsets.symmetric(
-          vertical: 18.0,
-          horizontal: 20.0,
+          vertical: 10.0, // Altura exacta de iOS
+          horizontal: 16.0,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(10), // iOS Search Bar Standard
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: Theme.of(context).primaryColor.withOpacity(0.2),
-            width: 1.5,
+            color: Theme.of(context).primaryColor.withOpacity(0.3),
+            width: 1.0,
           ),
         ),
       ),
@@ -627,14 +897,15 @@ class _FiltrosCategorias extends StatelessWidget {
   }
 }
 
+// --- NUEVA TARJETA DE ARTÍCULO (Soporta Imágenes y Links) ---
 class _TarjetaArticulo extends StatelessWidget {
   final String titulo;
   final String fuente;
   final String tiempoLectura;
   final bool isDestacado;
   final String? contenido;
-  final String? imageUrl;
-  final String? url;
+  final String? imageUrl; // NUEVO: Para la foto de la noticia
+  final String? articleUrl; // NUEVO: Para abrir la web original
 
   const _TarjetaArticulo({
     required this.titulo,
@@ -643,48 +914,71 @@ class _TarjetaArticulo extends StatelessWidget {
     this.isDestacado = false,
     this.contenido,
     this.imageUrl,
-    this.url,
+    this.articleUrl,
   });
 
-  Future<void> _abrirEnlace(BuildContext context) async {
-    if (url != null) {
-      final uri = Uri.parse(url!);
+  Future<void> _abrirEnNavegador(BuildContext context) async {
+    if (articleUrl != null && articleUrl!.isNotEmpty) {
+      final uri = Uri.parse(articleUrl!);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No se pudo abrir el enlace',
+              style: TextStyle(color: Theme.of(context).primaryColor),
+            ),
+          ),
+        );
       }
     }
-    // Si no hay URL, se abre en el lector integrado (comportamiento original)
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            ReaderScreen(titulo: titulo, fuente: fuente, contenido: contenido),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => _abrirEnlace(context),
+      onTap: () {
+        // Si tiene un link web, abrimos el navegador. Si no, tratamos de abrir el Súper Lector.
+        if (articleUrl != null) {
+          _abrirEnNavegador(context);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(
+                titulo: titulo,
+                fuente: fuente,
+                contenido: contenido,
+              ),
+            ),
+          );
+        }
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20), // Radio más elevado
+          border: Border.all(
+            color:
+                Theme.of(context).dividerColor?.withOpacity(0.4) ??
+                Colors.grey.withOpacity(0.2),
+            width: 0.5, // Hairline border
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 15,
-              offset: const Offset(0, 6),
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(12.0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // TEXTO DE LA NOTICIA
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -693,10 +987,13 @@ class _TarjetaArticulo extends StatelessWidget {
                       titulo,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 16,
+                        fontSize: 15,
                         color: Theme.of(context).primaryColor,
-                        height: 1.3, // Interlineado para mejor lectura
+                        height: 1.3,
+                        letterSpacing: -0.3, // Texto denso moderno
                       ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -705,7 +1002,7 @@ class _TarjetaArticulo extends StatelessWidget {
                           const Padding(
                             padding: EdgeInsets.only(right: 4.0),
                             child: Icon(
-                              Icons.star,
+                              Icons.local_fire_department,
                               color: Colors.orangeAccent,
                               size: 16,
                             ),
@@ -717,7 +1014,7 @@ class _TarjetaArticulo extends StatelessWidget {
                               color: Theme.of(
                                 context,
                               ).primaryColor.withOpacity(0.6),
-                              fontSize: 13,
+                              fontSize: 12,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -728,31 +1025,41 @@ class _TarjetaArticulo extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              imageUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        imageUrl!,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.error_outline),
-                      ),
-                    )
-                  : Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.article_outlined,
-                        color: Theme.of(context).primaryColor.withOpacity(0.5),
-                      ),
-                    ),
+              const SizedBox(width: 12),
+              // IMAGEN DE LA NOTICIA
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color:
+                        Theme.of(context).dividerColor ??
+                        Colors.grey.withOpacity(0.2),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: imageUrl != null && imageUrl!.isNotEmpty
+                      ? Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.newspaper,
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.3),
+                          ),
+                        )
+                      : Icon(
+                          Icons.article_outlined,
+                          color: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.5),
+                        ),
+                ),
+              ),
             ],
           ),
         ),
@@ -822,7 +1129,18 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
     final newsProvider = Provider.of<NewsProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Actualidad'), centerTitle: false),
+      appBar: AppBar(
+        title: const Text(
+          'Actualidad',
+          style: TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.2,
+          ),
+        ),
+        centerTitle: false,
+        toolbarHeight: 80,
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -966,7 +1284,7 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                           isDestacado: score > 0.8,
                           contenido: cleanDescription,
                           imageUrl: imageToDisplay,
-                          url: articulo
+                          articleUrl: articulo
                               .link, // Pasamos el link directo a la web real
                         ),
                       );
@@ -982,7 +1300,7 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
   }
 }
 
-// --- SECCIÓN 3: BIBLIOTECA (Tus PDFs y Libros) ---
+// --- SECCIÓN 3: BIBLIOTECA (Tus PDFs y Libros REALES) ---
 class _SeccionBiblioteca extends StatefulWidget {
   const _SeccionBiblioteca();
 
@@ -991,137 +1309,47 @@ class _SeccionBiblioteca extends StatefulWidget {
 }
 
 class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
-  bool _esVistaGrid = false; // Alternador de vistas
+  final StorageService _storageService = StorageService();
+  List<Map<String, dynamic>> _documentos = [];
+  bool _vistaCuadricula = false; // Controla si vemos lista o grid
 
-  // Muestra el panel interactivo del resumen generado por IA
-  Future<void> _mostrarResumenIA(
-    BuildContext context,
-    Map<String, dynamic> doc,
-  ) async {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.auto_awesome, color: Colors.purple[400]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Resumen IA: ${doc['titulo']}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                FutureBuilder<String>(
-                  future: _generarResumen(doc),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            children: [
-                              CircularProgressIndicator(
-                                color: Colors.purple[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Analizando primera página...',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).primaryColor.withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    } else if (snapshot.hasError) {
-                      return Text(
-                        'Error al generar resumen: ${snapshot.error}',
-                      );
-                    } else {
-                      return Container(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.4,
-                        ),
-                        child: SingleChildScrollView(
-                          child: Text(
-                            snapshot.data ?? 'Sin resumen.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.5,
-                              color: Theme.of(
-                                context,
-                              ).primaryColor.withOpacity(0.9),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  @override
+  void initState() {
+    super.initState();
+    _cargarBiblioteca();
   }
 
-  // Motor de extracción rápida de contexto (Extrae solo la pag 1 para no saturar tokens IA)
-  Future<String> _generarResumen(Map<String, dynamic> doc) async {
-    try {
-      String extract = '';
-      if (doc['esPdf'] == true && doc['path'] != null) {
-        final File file = File(doc['path']);
-        final PdfDocument document = PdfDocument(
-          inputBytes: file.readAsBytesSync(),
-        );
-        final PdfTextExtractor extractor = PdfTextExtractor(document);
-        // Extraemos solo la primera página para dar contexto eficiente a la IA
-        extract = extractor.extractText(startPageIndex: 0, endPageIndex: 0);
-        document.dispose();
-      } else {
-        return 'Solo se pueden resumir documentos PDF locales.';
-      }
+  // Ahora carga SOLO lo que realmente existe en la base de datos
+  void _cargarBiblioteca() {
+    final docsDB = LocalDbService.obtenerDocumentos();
+    setState(() => _documentos = docsDB);
+  }
 
-      final aiService = AiTranslationService();
-      return await aiService.getResumen(doc['titulo'], extract);
-    } catch (e) {
-      return 'No se pudo leer el documento para resumir. Asegúrate de que no esté encriptado o dañado.';
+  // Método para eliminar un documento
+  void _borrarDocumento(int index) async {
+    await LocalDbService.eliminarDocumento(index);
+    _cargarBiblioteca(); // Recargamos la interfaz
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Documento eliminado',
+            style: TextStyle(color: Theme.of(context).primaryColor),
+          ),
+          backgroundColor: Theme.of(context).cardColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
   Future<void> _agregarArchivoLocal({
-    required BuildContext context,
-    required LibraryProvider provider,
     required bool esPdf,
     required bool esEpub,
     required List<String> extensiones,
   }) async {
-    Navigator.pop(context);
-
+    Navigator.pop(context); // Cierra el menú inferior
     try {
       FilePickerResult? resultado = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -1136,10 +1364,10 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
           'esEpub': esEpub,
           'path': resultado.files.single.path,
           'url': null,
-          'etiqueta': 'Locales',
         };
 
-        await provider.agregarDocumento(nuevoDoc);
+        await LocalDbService.guardarDocumento(nuevoDoc);
+        _cargarBiblioteca(); // Actualizamos la lista visual
       }
     } catch (e) {
       print('Error al seleccionar el archivo: $e');
@@ -1148,372 +1376,325 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
 
   @override
   Widget build(BuildContext context) {
-    final libraryProvider = Provider.of<LibraryProvider>(context);
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi Biblioteca'), centerTitle: false),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Añadir',
-          style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.5),
+      appBar: AppBar(
+        title: const Text(
+          'Biblioteca',
+          style: TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.2,
+          ),
         ),
-        elevation: 2,
-        onPressed: () {
-          // Menú inferior para seleccionar tipo de archivo
-          showModalBottomSheet(
-            context: context,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        toolbarHeight: 80,
+        centerTitle: false,
+        actions: [
+          // Botón para alternar entre Lista y Cuadrícula
+          IconButton(
+            icon: Icon(
+              _vistaCuadricula
+                  ? Icons.view_list_rounded
+                  : Icons.grid_view_rounded,
             ),
-            backgroundColor: Colors.white,
-            builder: (bottomSheetContext) => SafeArea(
-              child: Wrap(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: Text(
-                      'Añadir a la biblioteca',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+            tooltip: 'Cambiar vista',
+            onPressed: () =>
+                setState(() => _vistaCuadricula = !_vistaCuadricula),
+          ),
+        ],
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(
+          bottom: 90.0,
+        ), // ESTO SOLUCIONA LA ORIENTACIÓN Y OVERLAP CON EL MENÚ
+        child: FloatingActionButton(
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+          child: const Icon(Icons.add),
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              backgroundColor: Theme.of(context).cardColor,
+              builder: (context) => SafeArea(
+                child: Wrap(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text(
+                        'Añadir documento',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).primaryColor,
+                        ),
                       ),
                     ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.picture_as_pdf,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      title: Text(
+                        'Añadir PDF',
+                        style: TextStyle(color: Theme.of(context).primaryColor),
+                      ),
+                      onTap: () => _agregarArchivoLocal(
+                        esPdf: true,
+                        esEpub: false,
+                        extensiones: ['pdf'],
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.book,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      title: Text(
+                        'Añadir Libro (ePub)',
+                        style: TextStyle(color: Theme.of(context).primaryColor),
+                      ),
+                      onTap: () => _agregarArchivoLocal(
+                        esPdf: false,
+                        esEpub: true,
+                        extensiones: ['epub'],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      // Si no hay documentos, mostramos una pantalla vacía elegante
+      body: _documentos.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.auto_stories_outlined,
+                    size: 80,
+                    color: Theme.of(context).primaryColor.withOpacity(0.2),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.picture_as_pdf),
-                    title: const Text('Añadir PDF'),
-                    onTap: () => _agregarArchivoLocal(
-                      context: bottomSheetContext,
-                      provider: libraryProvider,
-                      esPdf: true,
-                      esEpub: false,
-                      extensiones: ['pdf'],
+                  const SizedBox(height: 16),
+                  Text(
+                    'Tu biblioteca está vacía',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).primaryColor.withOpacity(0.6),
                     ),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.book),
-                    title: const Text('Añadir Libro (ePub)'),
-                    onTap: () => _agregarArchivoLocal(
-                      context: bottomSheetContext,
-                      provider: libraryProvider,
-                      esPdf: false,
-                      esEpub: true,
-                      extensiones: ['epub'],
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.text_snippet),
-                    title: const Text('Añadir Texto (TXT)'),
-                    onTap: () => _agregarArchivoLocal(
-                      context: bottomSheetContext,
-                      provider: libraryProvider,
-                      esPdf: false,
-                      esEpub: false,
-                      extensiones: ['txt'],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Toca el botón + para añadir PDFs o ePubs.',
+                    style: TextStyle(
+                      color: Theme.of(context).primaryColor.withOpacity(0.4),
                     ),
                   ),
                 ],
               ),
-            ),
-          );
-        },
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-        children: [
-          // --- TARJETA GOOGLE PLAY BOOKS ---
-          Container(
+            )
+          // Si hay documentos, mostramos Cuadrícula o Lista según prefiera el usuario
+          : _vistaCuadricula
+          ? _construirVistaCuadricula()
+          : _construirVistaLista(),
+    );
+  }
+
+  // --- VISTA 1: LISTA (Con función de deslizar para borrar) ---
+  Widget _construirVistaLista() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+      itemCount: _documentos.length,
+      itemBuilder: (context, index) {
+        final doc = _documentos[index];
+
+        return Dismissible(
+          key: Key(doc['path'] ?? doc['titulo'] + index.toString()),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
-              color: Colors.blueAccent.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12), // Redondeado moderado
+              color: Colors.red[400],
+              borderRadius: BorderRadius.circular(12),
             ),
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
+            child: const Icon(Icons.delete_outline, color: Colors.white),
+          ),
+          onDismissed: (direction) => _borrarDocumento(index),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor ?? Colors.grey,
+                ),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.of(context).primaryColor.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.cloud_download_outlined,
-                    color: Colors.blueAccent,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Buscar en Google Books',
-                        style: TextStyle(
-                          color: Colors.blueAccent,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Explora el catálogo mundial y descárgalos.',
-                        style: TextStyle(
-                          color: Colors.blueAccent.withOpacity(0.8),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    doc['esPdf'] == true
+                        ? Icons.picture_as_pdf_outlined
+                        : Icons.book_outlined,
+                    color: Theme.of(context).primaryColor.withOpacity(0.6),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    // Abre un buscador rápido
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        final textCtrl = TextEditingController();
-                        return AlertDialog(
-                          backgroundColor: Theme.of(context).cardColor,
-                          title: const Text('Búsqueda Rápida Google Books'),
-                          content: TextField(
-                            controller: textCtrl,
-                            decoration: const InputDecoration(
-                              hintText: 'Ej. El Quijote',
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cerrar'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () async {
-                                final items =
-                                    await GoogleBooksService.buscarLibros(
-                                      textCtrl.text,
-                                    );
-                                Navigator.pop(context);
-                                if (items.isNotEmpty) {
-                                  final primer = items[0]['volumeInfo'];
-                                  libraryProvider.agregarDocumento({
-                                    'titulo': primer['title'] ?? 'Libro Web',
-                                    'descargado': false,
-                                    'esPdf': true,
-                                    'esEpub': false,
-                                    'url': primer['infoLink'] ?? '',
-                                    'etiqueta': 'Google Books',
-                                  });
-                                }
-                              },
-                              child: const Text('Añadir el mejor resultado'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                title: Text(
+                  doc['titulo'],
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  'Disponible offline',
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor.withOpacity(0.6),
+                    fontSize: 13,
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(context).primaryColor.withOpacity(0.3),
+                ),
+                onTap: () => _abrirLector(doc),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- VISTA 2: CUADRÍCULA (Estilo estantería) ---
+  Widget _construirVistaCuadricula() {
+    return GridView.builder(
+      padding: const EdgeInsets.all(20.0),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2, // Dos columnas
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.75, // Proporción estilo libro
+      ),
+      itemCount: _documentos.length,
+      itemBuilder: (context, index) {
+        final doc = _documentos[index];
+        return GestureDetector(
+          onTap: () => _abrirLector(doc),
+          onLongPress: () {
+            // Eliminar al mantener presionado en vista grid
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: Theme.of(context).cardColor,
+                title: Text(
+                  'Eliminar documento',
+                  style: TextStyle(color: Theme.of(context).primaryColor),
+                ),
+                content: Text(
+                  '¿Deseas quitar "${doc['titulo']}" de tu biblioteca?',
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor.withOpacity(0.8),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      'Cancelar',
+                      style: TextStyle(color: Colors.grey),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                  child: const Text(
-                    'Explorar',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _borrarDocumento(index);
+                    },
+                    child: const Text(
+                      'Eliminar',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).dividerColor ?? Colors.grey,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  doc['esPdf'] == true
+                      ? Icons.picture_as_pdf_rounded
+                      : Icons.menu_book_rounded,
+                  size: 50,
+                  color: Theme.of(context).primaryColor.withOpacity(0.4),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Text(
+                    doc['titulo'],
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 36),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Carpetas',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  _esVistaGrid
-                      ? Icons.view_list_outlined
-                      : Icons.grid_view_outlined,
-                ),
-                onPressed: () => setState(() => _esVistaGrid = !_esVistaGrid),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: libraryProvider.etiquetasDisponibles.map((etiqueta) {
-                final isSelected = libraryProvider.etiquetaActiva == etiqueta;
-                final primaryColor = Theme.of(context).primaryColor;
-                final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(etiqueta),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        HapticFeedback.selectionClick();
-                        libraryProvider.setEtiquetaActiva(etiqueta);
-                      }
-                    },
-                    selectedColor: primaryColor,
-                    labelStyle: TextStyle(
-                      color: isSelected ? scaffoldBg : primaryColor,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                    ),
-                    backgroundColor: Theme.of(context).cardColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      side: BorderSide.none,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // --- LISTA ALMACENAMIENTO LOCAL ---
-          ...libraryProvider.documentos.map((doc) {
-            final isDownloaded = doc['descargado'] as bool;
-            final isDownloading = doc['descargando'] ?? false;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      Icons.book_outlined,
-                      color: Theme.of(context).primaryColor.withOpacity(0.6),
-                    ),
-                  ),
-                  title: Text(
-                    doc['titulo'],
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    isDownloading
-                        ? 'Descargando...'
-                        : isDownloaded
-                        ? 'Disponible offline'
-                        : 'Toque para descargar',
-                    style: TextStyle(
-                      color: isDownloaded
-                          ? Theme.of(context).primaryColor.withOpacity(0.6)
-                          : Theme.of(context).primaryColor.withOpacity(0.4),
-                      fontSize: 13,
-                    ),
-                  ),
-                  trailing: isDownloading
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Theme.of(
-                              context,
-                            ).primaryColor, // Color coordinado
-                          ),
-                        )
-                      : Icon(
-                          isDownloaded
-                              ? Icons.check_circle_outline
-                              : Icons.arrow_circle_down_outlined,
-                          color: isDownloaded
-                              ? Theme.of(context).primaryColor
-                              : Theme.of(context).primaryColor.withOpacity(0.3),
-                          size: 26,
-                        ),
-                  onLongPress: isDownloaded && doc['esPdf'] == true
-                      ? () {
-                          HapticFeedback.heavyImpact();
-                          _mostrarResumenIA(context, doc);
-                        }
-                      : null,
-                  onTap: isDownloading
-                      ? null // Desactiva el toque mientras se descarga
-                      : () async {
-                          if (isDownloaded && doc['path'] != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ReaderScreen(
-                                  titulo: doc['titulo'],
-                                  fuente:
-                                      doc['etiqueta'] ?? 'Almacenamiento Local',
-                                  documentPath: doc['path'],
-                                  isPdf: doc['esPdf'] ?? false,
-                                  isEpub: doc['esEpub'] ?? false,
-                                ),
-                              ),
-                            );
-                          } else {
-                            // INICIAMOS LA DESCARGA REAL
-                            if (doc['url'] != null) {
-                              await libraryProvider.descargarDocumento(doc);
-                            }
-                          }
-                        },
-                ),
-              ),
-            );
-          }).toList(),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  void _abrirLector(Map<String, dynamic> doc) {
+    if (doc['path'] != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ReaderScreen(
+            titulo: doc['titulo'],
+            fuente: 'Mi Biblioteca',
+            documentPath: doc['path'],
+            isPdf: doc['esPdf'] ?? false,
+            isEpub: doc['esEpub'] ?? false,
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -1563,9 +1744,9 @@ class _NewsLoadingSkeletonState extends State<_NewsLoadingSkeleton>
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withOpacity(0.04), // Súper transparente
+                    blurRadius: 24, // Muy difuminado
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
