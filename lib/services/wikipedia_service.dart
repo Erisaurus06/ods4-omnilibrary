@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class WikipediaService {
   // Función principal para buscar en la API de Wikipedia en español
@@ -17,10 +18,14 @@ class WikipediaService {
 
     try {
       // Hacemos la petición a internet
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'OmniLibraryApp/1.0 (contacto@tuemail.com)'},
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'User-Agent': 'OmniLibraryApp/1.0 (contacto@tuemail.com)',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       // Código 200 significa que la conexión fue exitosa
       if (response.statusCode == 200) {
@@ -38,12 +43,12 @@ class WikipediaService {
 
         return resultados;
       } else {
-        print('Error del servidor: ${response.statusCode}');
+        debugPrint('Error del servidor: ${response.statusCode}');
         return [];
       }
     } catch (e) {
       // Si no hay internet o falla algo, atrapamos el error aquí para que la app no se cierre
-      print('Ocurrió un error de conexión: $e');
+      debugPrint('Ocurrió un error de conexión: $e');
       return [];
     }
   }

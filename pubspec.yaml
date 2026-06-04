@@ -48,6 +48,7 @@ dependencies:
   provider: ^6.1.1
   screen_brightness: any
   shared_preferences: ^2.2.2
+  share_plus: ^10.0.0
   supabase_flutter: ^2.12.4
   syncfusion_flutter_pdfviewer: any
   url_launcher: ^6.2.6

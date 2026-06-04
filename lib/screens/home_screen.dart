@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/google_search_service.dart';
 import '../services/google_books_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -151,6 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
 // --- SECCIÓN 4: AJUSTES (Configuración y APIs) ---
 
 void _mostrarVincularGoogleBooks(BuildContext context) {
+  // The GoogleSignIn instance is a singleton.
+  final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+
   showModalBottomSheet(
     context: context,
     backgroundColor: Theme.of(context).cardColor,
@@ -196,13 +200,32 @@ void _mostrarVincularGoogleBooks(BuildContext context) {
                 ),
                 icon: const Icon(Icons.login),
                 label: const Text('Autenticar con Google'),
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Simulando conexión segura OAuth...'),
-                    ),
-                  );
+                onPressed: () async {
+                  try {
+                    // The `signIn` method is now `authenticate`, and scopes are passed here.
+                    final account = await googleSignIn.authenticate(scopeHint: [
+                      'email',
+                      'https://www.googleapis.com/auth/books'
+                    ]);
+
+                    Navigator.pop(context); // Cierra el modal inferior
+                    // `authenticate` throws on failure, so `account` will not be null here.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Vinculado con éxito a: ${account.email}',
+                        ),
+                      ),
+                    );
+                    // OPCIONAL: Guarda `account.authHeaders` o el Token para inyectarlo en tus peticiones a la API
+                  } catch (e) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error al conectar con Google: $e'),
+                      ),
+                    );
+                  }
                 },
               ),
             ),
@@ -222,6 +245,19 @@ class _SeccionAjustes extends StatefulWidget {
 
 class _SeccionAjustesState extends State<_SeccionAjustes> {
   bool _modoLectura = true;
+  String _cacheSize = 'Calculando...';
+
+  @override
+  void initState() {
+    super.initState();
+    _actualizarTamanoCache();
+  }
+
+  void _actualizarTamanoCache() {
+    setState(() {
+      _cacheSize = LocalDbService.obtenerTamanoCache();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,11 +288,10 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
+          Material(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias, // Estilo Inset Grouped de iOS 17
             child: Column(
               children: [
                 _ActionTile(
@@ -267,19 +302,58 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                       SupabaseService.client.auth.currentUser?.email ??
                       'Usuario',
                   onTap: () async {
-                    await SupabaseService.client.auth.signOut();
+                    // Diálogo de confirmación premium estilo iOS
+                    final confirmar = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: Theme.of(context).cardColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: Text(
+                          'Cerrar Sesión',
+                          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold),
+                        ),
+                        content: Text(
+                          '¿Estás seguro de que deseas salir de tu cuenta?',
+                          style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.8)),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Salir', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmar == true) {
+                      await SupabaseService.client.auth.signOut();
+                    }
                   },
                 ),
                 Divider(
                   height: 1,
-                  indent: 50,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54, // Alineación perfecta de iOS (salta el icono)
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 _ActionTile(
                   titulo: 'Sincronización en la Nube',
                   icono: Icons.cloud_sync,
                   colorIcono: Colors.indigo,
-                  onTap: () {},
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Sincronización en la nube próximamente.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -293,13 +367,10 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(
-                10,
-              ), // Radio Inset Grouped nativo
-            ),
+          Material(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 _SwitchTile(
@@ -311,8 +382,8 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                 ),
                 Divider(
                   height: 1,
-                  indent: 64,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54,
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 _SwitchTile(
                   titulo: 'Modo Lectura',
@@ -333,11 +404,10 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
+          Material(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 const _ApiTile(
@@ -348,8 +418,8 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                 ),
                 Divider(
                   height: 1,
-                  indent: 64,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54,
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 const _ApiTile(
                   titulo: 'Noticias RSS',
@@ -359,8 +429,8 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                 ),
                 Divider(
                   height: 1,
-                  indent: 64,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54,
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 _ApiTile(
                   titulo: 'Google Play Books',
@@ -381,30 +451,45 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
+          Material(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 _ActionTile(
-                  titulo: 'Gestionar Almacenamiento',
+                  titulo: 'Espacio Ocupado (Noticias)',
                   icono: Icons.storage,
                   colorIcono: Colors.green,
-                  trailingText: '1.2 GB',
-                  onTap: () {},
+                  trailingText: _cacheSize, // LLAMADA API REAL
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Tu caché local pesa $_cacheSize.'),
+                        backgroundColor: Theme.of(context).primaryColor,
+                      ),
+                    );
+                  },
                 ),
                 Divider(
                   height: 1,
-                  indent: 50,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54,
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 _ActionTile(
                   titulo: 'Borrar Caché Local',
                   icono: Icons.delete_sweep,
                   colorIcono: Colors.red,
-                  onTap: () {},
+                  onTap: () async {
+                    await LocalDbService.limpiarCache();
+                    _actualizarTamanoCache();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Caché eliminada correctamente 🧹'),
+                        backgroundColor: Theme.of(context).cardColor,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -418,35 +503,46 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
+          Material(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 _ActionTile(
-                  titulo: 'Versión de la App',
-                  icono: Icons.info_outline,
+                  titulo:
+                      'Versión del Sistema', // Usando la API real del dispositivo
+                  icono: Icons.phone_iphone,
                   colorIcono: Colors.orange,
-                  trailingText: '1.0.0',
+                  trailingText: Platform.operatingSystemVersion
+                      .split(' ')
+                      .first,
                   onTap: () {},
                 ),
                 Divider(
                   height: 1,
-                  indent: 50,
-                  color: Theme.of(context).dividerColor?.withOpacity(0.5),
+                  indent: 54,
+                  color: Theme.of(context).dividerColor.withOpacity(0.5),
                 ),
                 _ActionTile(
                   titulo: 'Términos y Privacidad',
                   icono: Icons.shield_outlined,
                   colorIcono: Colors.blueGrey,
-                  onTap: () {},
+                  onTap: () async {
+                    final uri = Uri.parse(
+                      'https://www.google.com/policies/privacy/',
+                    );
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.inAppWebView);
+                    }
+                  },
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(
+            height: 120,
+          ), // Arreglo: Espacio extra para que no lo cubra el menú transparente inferior
         ],
       ),
     );
@@ -568,7 +664,10 @@ class _ActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 2,
+      ), // Más compacto estilo iOS
       leading: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
@@ -608,26 +707,59 @@ class _SeccionExplorar extends StatefulWidget {
 
 class _SeccionExplorarState extends State<_SeccionExplorar> {
   bool _isSearching = false;
+  String _filtroActual = 'Todo';
   List<dynamic> _wikiResultados = [];
   List<dynamic> _pdfResultados = [];
   List<dynamic> _booksResultados = [];
+  List<dynamic> _fuentesConfiablesResultados = [];
+  List<dynamic> _webResultados =
+      []; // NUEVA: Para búsquedas libres (patos, bicis)
+  bool _busquedaRealizada = false;
 
   Future<void> _buscarMultifuente(String query) async {
-    if (query.trim().isEmpty) return;
-    setState(() => _isSearching = true);
+    if (query.trim().isEmpty) {
+      setState(
+        () => _busquedaRealizada = false,
+      ); // Reinicia a vista de recomendaciones
+      return;
+    }
+    setState(() {
+      _isSearching = true;
+      _busquedaRealizada = true;
+    });
 
     try {
-      // Ejecutamos las 3 APIs de Google y Wikipedia en paralelo para máxima velocidad
+      // Ejecutamos las 5 APIs en paralelo, manejando errores de forma individual.
+      // Así, si las APIs de Google fallan (por ej. falta de API Key), no bloquean todo el buscador.
       final results = await Future.wait([
-        WikipediaService.buscarArticulos(query),
-        GoogleSearchService.buscarDocumentosConfiables(query),
-        GoogleBooksService.buscarLibros(query),
+        WikipediaService.buscarArticulos(query).catchError((e) {
+          debugPrint('Error en Wikipedia: $e');
+          return <dynamic>[];
+        }),
+        GoogleSearchService.buscarDocumentosConfiables(query).catchError((e) {
+          debugPrint('Error en Google Docs: $e');
+          return <dynamic>[];
+        }),
+        GoogleBooksService.buscarLibros(query).catchError((e) {
+          debugPrint('Error en Google Books: $e');
+          return <dynamic>[];
+        }),
+        GoogleSearchService.buscarArticulosConfiables(query).catchError((e) {
+          debugPrint('Error en Google Articles: $e');
+          return <dynamic>[];
+        }),
+        GoogleSearchService.buscarWebGeneral(query).catchError((e) {
+          debugPrint('Error en Google Web: $e');
+          return <dynamic>[];
+        }),
       ]);
 
       setState(() {
-        _wikiResultados = results[0];
-        _pdfResultados = results[1];
-        _booksResultados = results[2];
+        _wikiResultados = (results[0] as List<dynamic>?) ?? [];
+        _pdfResultados = (results[1] as List<dynamic>?) ?? [];
+        _booksResultados = (results[2] as List<dynamic>?) ?? [];
+        _fuentesConfiablesResultados = (results[3] as List<dynamic>?) ?? [];
+        _webResultados = (results[4] as List<dynamic>?) ?? [];
       });
     } catch (e) {
       print('Error en búsqueda multifuente: $e');
@@ -639,8 +771,50 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
   Future<void> _abrirEnNavegador(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Llama a la API de un navegador seguro e incrustado (Safari View Controller o Custom Tabs)
+      await launchUrl(uri, mode: LaunchMode.inAppWebView);
     }
+  }
+
+  // --- RECOMENDACIONES BASE VÁLIDAS ---
+  Widget _buildRecomendaciones() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Recomendaciones Confiables',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 16),
+        const _TarjetaArticulo(
+          titulo: 'Avances en Inteligencia Artificial',
+          fuente: 'MIT Technology Review',
+          tiempoLectura: 'Artículo',
+          isDestacado: true,
+          contenido:
+              'Descubre cómo los últimos modelos generativos están redefiniendo el futuro y la ciencia actual.',
+          articleUrl: 'https://www.technologyreview.com/',
+        ),
+        const SizedBox(height: 12),
+        const _TarjetaArticulo(
+          titulo: 'Los misterios del Universo Profundo',
+          fuente: 'National Geographic',
+          tiempoLectura: 'Lectura',
+          contenido:
+              'Nuevas imágenes de misiones espaciales revelan galaxias muy antiguas.',
+          articleUrl: 'https://www.nationalgeographic.com/science/space',
+        ),
+        const SizedBox(height: 12),
+        const _TarjetaArticulo(
+          titulo: 'Diccionario de la lengua española',
+          fuente: 'Real Academia Española (RAE)',
+          tiempoLectura: 'Referencia',
+          contenido:
+              'Consulta la principal obra de referencia para despejar dudas del idioma español.',
+          articleUrl: 'https://dle.rae.es/',
+        ),
+      ],
+    );
   }
 
   @override
@@ -651,7 +825,15 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
         actions: [
           IconButton(
             icon: const Icon(Icons.headphones_outlined),
-            onPressed: () => print("Deep Link a TecConnection"),
+            tooltip: 'Escuchar en TecConnection',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Integración con TecConnection próximamente 🎧'),
+                  backgroundColor: Theme.of(context).cardColor,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -670,7 +852,12 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
           const SizedBox(height: 24),
           _BuscadorUniversal(onBuscar: (query) => _buscarMultifuente(query)),
           const SizedBox(height: 24),
-          const _FiltrosCategorias(),
+          _FiltrosCategorias(
+            filtroSeleccionado: _filtroActual,
+            onFiltroCambiado: (String nuevoFiltro) {
+              setState(() => _filtroActual = nuevoFiltro);
+            },
+          ),
           const SizedBox(height: 36),
           const Text(
             'Resultados de la Búsqueda',
@@ -678,23 +865,25 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
           ),
           const SizedBox(height: 16),
           _isSearching
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(40),
-                    child: CircularProgressIndicator(
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
+              ? const Padding(
+                  padding: EdgeInsets.only(top: 20.0),
+                  child: _NewsLoadingSkeleton(), // Usamos la animación premium en lugar de un círculo
                 )
+              : !_busquedaRealizada
+              ? _buildRecomendaciones() // Muestra sugerencias buenas si el usuario no ha buscado
               : (_wikiResultados.isEmpty &&
                     _pdfResultados.isEmpty &&
-                    _booksResultados.isEmpty)
-              ? const Text('Sin resultados.')
+                    _booksResultados.isEmpty &&
+                    _fuentesConfiablesResultados.isEmpty &&
+                    _webResultados.isEmpty)
+              ? const Text('Sin resultados. Intenta con otros términos.')
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // --- RESULTADOS GOOGLE BOOKS ---
-                    if (_booksResultados.isNotEmpty) ...[
+                    if ((_filtroActual == 'Todo' ||
+                            _filtroActual == 'Libros') &&
+                        _booksResultados.isNotEmpty) ...[
                       const Text(
                         'Libros Encontrados (Google Books)',
                         style: TextStyle(
@@ -711,9 +900,10 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                           child: _TarjetaArticulo(
                             titulo: volumeInfo['title'] ?? 'Sin título',
                             fuente: 'Google Books',
-                            tiempoLectura:
-                                volumeInfo['authors']?.join(', ') ??
-                                'Desconocido',
+                            tiempoLectura: volumeInfo['authors'] is List
+                                ? (volumeInfo['authors'] as List).join(', ')
+                                : (volumeInfo['authors']?.toString() ??
+                                      'Desconocido'),
                             contenido:
                                 volumeInfo['description'] ?? 'Sin descripción.',
                             imageUrl: imageLinks['thumbnail']?.replaceFirst(
@@ -723,11 +913,37 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                             articleUrl: volumeInfo['infoLink'],
                           ),
                         );
-                      }).toList(),
+                      }),
+                      const SizedBox(height: 16),
+                    ],
+                    // --- RESULTADOS FUENTES CONFIABLES ---
+                    if ((_filtroActual == 'Todo' || _filtroActual == 'Web') &&
+                        _fuentesConfiablesResultados.isNotEmpty) ...[
+                      const Text(
+                        'Enciclopedias y Académicas (Britannica, RAE, Stanford...)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._fuentesConfiablesResultados.take(3).map((articulo) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: _TarjetaArticulo(
+                            titulo: articulo['title'] ?? 'Artículo confiable',
+                            fuente: articulo['displayLink'] ?? 'Enciclopedia',
+                            tiempoLectura: 'Artículo',
+                            contenido: articulo['snippet'] ?? '',
+                            articleUrl: articulo['link'],
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 16),
                     ],
                     // --- RESULTADOS PDFs DE LA WEB ---
-                    if (_pdfResultados.isNotEmpty) ...[
+                    if ((_filtroActual == 'Todo' || _filtroActual == 'PDFs') &&
+                        _pdfResultados.isNotEmpty) ...[
                       const Text(
                         'Documentos PDF Confiables',
                         style: TextStyle(
@@ -747,11 +963,13 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                             articleUrl: pdf['link'],
                           ),
                         );
-                      }).toList(),
+                      }),
                       const SizedBox(height: 16),
                     ],
                     // --- RESULTADOS WIKIPEDIA ---
-                    if (_wikiResultados.isNotEmpty) ...[
+                    if ((_filtroActual == 'Todo' ||
+                            _filtroActual == 'Wikipedia') &&
+                        _wikiResultados.isNotEmpty) ...[
                       const Text(
                         'Conceptos Base (Wikipedia)',
                         style: TextStyle(fontWeight: FontWeight.bold),
@@ -768,10 +986,35 @@ class _SeccionExplorarState extends State<_SeccionExplorar> {
                                 (wiki['snippet'] ?? '') +
                                 '\n\n(Toca para leer completo en la web)',
                             articleUrl:
-                                'https://es.wikipedia.org/wiki/${Uri.encodeComponent(wiki['title'])}',
+                                'https://es.wikipedia.org/wiki/${Uri.encodeComponent(wiki['title'] ?? '')}',
                           ),
                         );
-                      }).toList(),
+                      }),
+                      const SizedBox(height: 16),
+                    ],
+                    // --- RESULTADOS WEB GENERALES (PATO, BICICLETA, ETC) ---
+                    if ((_filtroActual == 'Todo' || _filtroActual == 'Web') &&
+                        _webResultados.isNotEmpty) ...[
+                      const Text(
+                        'Resultados Web Generales',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._webResultados.take(4).map((articulo) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: _TarjetaArticulo(
+                            titulo: articulo['title'] ?? 'Resultado Web',
+                            fuente: articulo['displayLink'] ?? 'Web',
+                            tiempoLectura: 'Página Web',
+                            contenido: articulo['snippet'] ?? '',
+                            articleUrl: articulo['link'],
+                          ),
+                        );
+                      }),
                     ],
                   ],
                 ),
@@ -851,7 +1094,13 @@ class _BuscadorUniversalState extends State<_BuscadorUniversal> {
 }
 
 class _FiltrosCategorias extends StatelessWidget {
-  const _FiltrosCategorias();
+  final String filtroSeleccionado;
+  final Function(String) onFiltroCambiado;
+
+  const _FiltrosCategorias({
+    required this.filtroSeleccionado,
+    required this.onFiltroCambiado,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -859,10 +1108,11 @@ class _FiltrosCategorias extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _buildChip('Todo', true, context),
-          _buildChip('Wikipedia', false, context),
-          _buildChip('Noticias', false, context),
-          _buildChip('Podcasts', false, context),
+          _buildChip('Todo', filtroSeleccionado == 'Todo', context),
+          _buildChip('Wikipedia', filtroSeleccionado == 'Wikipedia', context),
+          _buildChip('Web', filtroSeleccionado == 'Web', context),
+          _buildChip('Libros', filtroSeleccionado == 'Libros', context),
+          _buildChip('PDFs', filtroSeleccionado == 'PDFs', context),
         ],
       ),
     );
@@ -885,6 +1135,7 @@ class _FiltrosCategorias extends StatelessWidget {
         selected: isSelected,
         onSelected: (bool value) {
           HapticFeedback.lightImpact();
+          onFiltroCambiado(label);
         },
         selectedColor: primaryColor,
         backgroundColor: Theme.of(context).cardColor,
@@ -921,7 +1172,10 @@ class _TarjetaArticulo extends StatelessWidget {
     if (articleUrl != null && articleUrl!.isNotEmpty) {
       final uri = Uri.parse(articleUrl!);
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+        ); // Api de In-App Browser Seguro!
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -961,7 +1215,7 @@ class _TarjetaArticulo extends StatelessWidget {
           borderRadius: BorderRadius.circular(20), // Radio más elevado
           border: Border.all(
             color:
-                Theme.of(context).dividerColor?.withOpacity(0.4) ??
+                Theme.of(context).dividerColor.withOpacity(0.4) ??
                 Colors.grey.withOpacity(0.2),
             width: 0.5, // Hairline border
           ),
@@ -1078,48 +1332,108 @@ class _SeccionNoticias extends StatefulWidget {
 
 class _SeccionNoticiasState extends State<_SeccionNoticias> {
   final NewsFilterService _newsFilterService = NewsFilterService();
+  final TextEditingController _searchController = TextEditingController();
 
-  // Ya no es final para poder agregar nuevas categorías dinámicamente
-  List<String> _categorias = [
-    'Videojuegos',
+  final List<String> _categorias = [
+    'Para ti', // Predeterminado global
+    'Última hora',
+    'Tecnología',
+    'Deportes',
     'Nacionales',
-    'Internacionales',
-    'Seguridad',
   ];
 
-  void _mostrarDialogoNuevaCategoria(
-    BuildContext context,
-    dynamic newsProvider,
-  ) {
-    final TextEditingController controller = TextEditingController();
-    showDialog(
+  final List<String> _canalesSuscritos = [
+    'Última hora',
+  ]; // Canales con push activado simulados
+
+  void _toggleSuscripcion(String canal) {
+    setState(() {
+      if (_canalesSuscritos.contains(canal)) {
+        _canalesSuscritos.remove(canal);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Alertas silenciadas para: #$canal')),
+        );
+      } else {
+        _canalesSuscritos.add(canal);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('🔔 Recibirás alertas push sobre: #$canal')),
+        );
+      }
+    });
+  }
+
+  void _mostrarCanalesSuscritos(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: const Text('Añadir Preferencia de Noticias'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Ej. Inteligencia Artificial',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                setState(() => _categorias.insert(0, controller.text.trim()));
-                newsProvider.setCategoria(controller.text.trim());
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Buscar'),
-          ),
-        ],
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (context) {
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Mis Canales (Push Alerts)',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Recibirás notificaciones en tiempo real cuando periódicos publiquen historias de última hora sobre estos temas (estilo Twitter).',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_canalesSuscritos.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20.0),
+                        child: Center(
+                          child: Text('No tienes canales suscritos.'),
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: _canalesSuscritos.map((canal) {
+                          return Chip(
+                            label: Text('#${canal.toUpperCase()}'),
+                            onDeleted: () {
+                              setState(() {
+                                _canalesSuscritos.remove(canal);
+                              });
+                              setModalState(() {});
+                            },
+                            deleteIcon: const Icon(Icons.cancel, size: 18),
+                            backgroundColor: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.1),
+                            labelStyle: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -1127,11 +1441,12 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
   Widget build(BuildContext context) {
     // Instanciamos el Provider de Noticias para acceder a `newsProvider`
     final newsProvider = Provider.of<NewsProvider>(context);
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Actualidad',
+          'Noticias',
           style: TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
@@ -1140,34 +1455,82 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
         ),
         centerTitle: false,
         toolbarHeight: 80,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_active_outlined),
+            tooltip: 'Mis Canales',
+            onPressed: () => _mostrarCanalesSuscritos(context),
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // --- BUSCADOR PROPIO DE NOTICIAS ---
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 8.0,
+            ),
+            child: TextField(
+              controller: _searchController,
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  setState(() {
+                    // Agregamos la búsqueda al panel de categorías rápidas si no existe
+                    if (!_categorias.contains(value.trim())) {
+                      _categorias.insert(1, value.trim());
+                    }
+                  });
+                  newsProvider.setCategoria(value.trim());
+                  _searchController.clear();
+                  // Ocultamos el teclado
+                  FocusScope.of(context).unfocus();
+                }
+              },
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Buscar temas, periódicos...',
+                hintStyle: TextStyle(
+                  color: theme.primaryColor.withOpacity(0.5),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: theme.primaryColor.withOpacity(0.6),
+                ),
+                filled: true,
+                fillColor: theme.primaryColor.withOpacity(0.06),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 10.0,
+                  horizontal: 16.0,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30), // Estilo píldora
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+
           // --- CATEGORÍAS HORIZONTALES ---
           SizedBox(
-            height: 50,
+            height: 40,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: _categorias.length + 1,
+              itemCount: _categorias.length,
               itemBuilder: (context, index) {
-                if (index == _categorias.length) {
-                  return IconButton(
-                    icon: Icon(
-                      Icons.add_circle,
-                      color: Theme.of(context).primaryColor,
-                      size: 30,
-                    ),
-                    onPressed: () =>
-                        _mostrarDialogoNuevaCategoria(context, newsProvider),
-                  );
-                }
-
                 final cat = _categorias[index];
-                final isSelected = cat == newsProvider.categoriaSeleccionada;
-                final primaryColor = Theme.of(context).primaryColor;
-                final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
+                // Si está en 'Para ti', internamente la API usa 'Noticias Generales'
+                final categoryToSearch = cat == 'Para ti'
+                    ? 'Noticias Generales'
+                    : cat;
+                final isSelected =
+                    categoryToSearch == newsProvider.categoriaSeleccionada ||
+                    (cat == 'Para ti' &&
+                        newsProvider.categoriaSeleccionada ==
+                            'Noticias Generales');
+
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: ChoiceChip(
@@ -1175,26 +1538,83 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                     selected: isSelected,
                     onSelected: (bool selected) {
                       HapticFeedback.lightImpact();
-                      newsProvider.setCategoria(cat);
+                      newsProvider.setCategoria(categoryToSearch);
                     },
-                    selectedColor: primaryColor,
+                    selectedColor: theme.primaryColor,
                     labelStyle: TextStyle(
-                      color: isSelected ? scaffoldBg : primaryColor,
+                      color: isSelected
+                          ? theme.scaffoldBackgroundColor
+                          : theme.primaryColor,
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.w400,
                     ),
-                    backgroundColor: Theme.of(context).cardColor,
+                    backgroundColor: Colors.transparent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
-                      side: BorderSide.none,
+                      side: BorderSide(
+                        color: isSelected
+                            ? Colors.transparent
+                            : theme.dividerColor ?? Colors.grey,
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
-          const SizedBox(height: 10),
+          Divider(height: 20, color: theme.dividerColor.withOpacity(0.3)),
+
+          // --- BARRA DE SUSCRIPCIÓN A CANAL PUSH ---
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 4.0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '# ${newsProvider.categoriaSeleccionada.toUpperCase()}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: theme.primaryColor.withOpacity(0.8),
+                    letterSpacing: 1.0,
+                    fontSize: 15,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    _toggleSuscripcion(newsProvider.categoriaSeleccionada);
+                  },
+                  icon: Icon(
+                    _canalesSuscritos.contains(
+                          newsProvider.categoriaSeleccionada,
+                        )
+                        ? Icons.notifications_active
+                        : Icons.notifications_none,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _canalesSuscritos.contains(
+                          newsProvider.categoriaSeleccionada,
+                        )
+                        ? 'Suscrito'
+                        : 'Recibir Alertas',
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        _canalesSuscritos.contains(
+                          newsProvider.categoriaSeleccionada,
+                        )
+                        ? Colors.blueAccent
+                        : theme.primaryColor.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // --- LISTA DE NOTICIAS ---
           Expanded(
@@ -1222,10 +1642,8 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                   final textoA = '${a.title ?? ''} ${a.description ?? ''}';
                   final textoB = '${b.title ?? ''} ${b.description ?? ''}';
 
-                  final scoreA = newsProvider.newsFilterService
-                      .evaluateRelevance(textoA);
-                  final scoreB = newsProvider.newsFilterService
-                      .evaluateRelevance(textoB);
+                  final scoreA = _newsFilterService.evaluateRelevance(textoA);
+                  final scoreB = _newsFilterService.evaluateRelevance(textoB);
 
                   return scoreB.compareTo(
                     scoreA,
@@ -1249,10 +1667,7 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                   color: Theme.of(context).primaryColor,
                   backgroundColor: Theme.of(context).cardColor,
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0,
-                      vertical: 10.0,
-                    ),
+                    padding: const EdgeInsets.only(top: 0, bottom: 80),
                     itemCount: articulos.length,
                     itemBuilder: (context, index) {
                       final articulo = articulos[index];
@@ -1275,18 +1690,25 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
                         imageToDisplay = imgMatch.group(1);
                       }
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: _TarjetaArticulo(
-                          titulo: articulo.title ?? 'Sin título',
-                          fuente: feed.title ?? 'Noticias',
-                          tiempoLectura: 'Reciente',
-                          isDestacado: score > 0.8,
-                          contenido: cleanDescription,
-                          imageUrl: imageToDisplay,
-                          articleUrl: articulo
-                              .link, // Pasamos el link directo a la web real
-                        ),
+                      return Column(
+                        children: [
+                          _NoticiaFeedItem(
+                            titulo: articulo.title ?? 'Sin título',
+                            fuente: feed.title ?? 'Noticias',
+                            tiempoLectura: 'Reciente',
+                            isDestacado: score > 0.8,
+                            contenido: cleanDescription,
+                            imageUrl: imageToDisplay,
+                            articleUrl: articulo
+                                .link, // Pasamos el link directo a la web real
+                          ),
+                          Divider(
+                            height: 1,
+                            color: Theme.of(
+                              context,
+                            ).dividerColor.withOpacity(0.5),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -1297,6 +1719,193 @@ class _SeccionNoticiasState extends State<_SeccionNoticias> {
         ], // Cierra children de Column
       ), // Cierra Column
     ); // Cierra Scaffold
+  }
+}
+
+// --- NUEVA TARJETA DE NOTICIAS TIPO TWITTER / THREADS ---
+class _NoticiaFeedItem extends StatelessWidget {
+  final String titulo;
+  final String fuente;
+  final String tiempoLectura;
+  final bool isDestacado;
+  final String? contenido;
+  final String? imageUrl;
+  final String? articleUrl;
+
+  const _NoticiaFeedItem({
+    required this.titulo,
+    required this.fuente,
+    required this.tiempoLectura,
+    this.isDestacado = false,
+    this.contenido,
+    this.imageUrl,
+    this.articleUrl,
+  });
+
+  Future<void> _abrirEnNavegador(BuildContext context) async {
+    if (articleUrl != null && articleUrl!.isNotEmpty) {
+      final uri = Uri.parse(articleUrl!);
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo abrir el enlace')),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorPrimario = Theme.of(context).primaryColor;
+
+    return InkWell(
+      onTap: () {
+        if (articleUrl != null) {
+          _abrirEnNavegador(context);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(
+                titulo: titulo,
+                fuente: fuente,
+                contenido: contenido,
+              ),
+            ),
+          );
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // AVATAR FUENTE SIMULADO (Estilo red social)
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: colorPrimario.withOpacity(0.05),
+              child: Icon(
+                Icons.newspaper_rounded,
+                color: colorPrimario.withOpacity(0.6),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // CONTENIDO PRINCIPAL
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // HEADER (Fuente y tiempo)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fuente,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colorPrimario,
+                            fontSize: 15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isDestacado)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Icon(
+                            Icons
+                                .verified, // Check de verificación tipo red social
+                            color: Colors.blueAccent,
+                            size: 14,
+                          ),
+                        ),
+                      Text(
+                        '· $tiempoLectura',
+                        style: TextStyle(
+                          color: colorPrimario.withOpacity(0.5),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // TEXTO DE LA NOTICIA / TWEET
+                  Text(
+                    titulo,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colorPrimario.withOpacity(0.9),
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // IMAGEN ADJUNTA (Opcional)
+                  if (imageUrl != null && imageUrl!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      height: 180,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color:
+                              Theme.of(context).dividerColor ??
+                              Colors.grey.withOpacity(0.2),
+                        ),
+                        image: DecorationImage(
+                          image: NetworkImage(imageUrl!),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  // BOTONES DE ACCIÓN (Estilo Twitter)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _AccionSocial(
+                        icono: Icons.chat_bubble_outline,
+                        texto: 'Leer',
+                      ),
+                      _AccionSocial(icono: Icons.repeat_rounded, texto: ''),
+                      _AccionSocial(
+                        icono: Icons.favorite_border,
+                        texto: 'Guardar',
+                      ),
+                      _AccionSocial(icono: Icons.share_outlined, texto: ''),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccionSocial extends StatelessWidget {
+  final IconData icono;
+  final String texto;
+
+  const _AccionSocial({required this.icono, required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).primaryColor.withOpacity(0.5);
+    return Row(
+      children: [
+        Icon(icono, size: 18, color: color),
+        if (texto.isNotEmpty) const SizedBox(width: 6),
+        if (texto.isNotEmpty)
+          Text(texto, style: TextStyle(fontSize: 13, color: color)),
+      ],
+    );
   }
 }
 
@@ -1407,67 +2016,78 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         padding: const EdgeInsets.only(
           bottom: 90.0,
         ), // ESTO SOLUCIONA LA ORIENTACIÓN Y OVERLAP CON EL MENÚ
-        child: FloatingActionButton(
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-          child: const Icon(Icons.add),
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              backgroundColor: Theme.of(context).cardColor,
-              builder: (context) => SafeArea(
-                child: Wrap(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text(
-                        'Añadir documento',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
+        child:
+            FloatingActionButton(
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+              child: const Icon(Icons.add),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  backgroundColor: Theme.of(context).cardColor,
+                  builder: (context) => SafeArea(
+                    child: Wrap(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(20.0),
+                          child: Text(
+                            'Añadir documento',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
                         ),
-                      ),
+                        ListTile(
+                          leading: Icon(
+                            Icons.picture_as_pdf,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          title: Text(
+                            'Añadir PDF',
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                          onTap: () => _agregarArchivoLocal(
+                            esPdf: true,
+                            esEpub: false,
+                            extensiones: ['pdf'],
+                          ),
+                        ),
+                        ListTile(
+                          leading: Icon(
+                            Icons.book,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          title: Text(
+                            'Añadir Libro (ePub)',
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                          onTap: () => _agregarArchivoLocal(
+                            esPdf: false,
+                            esEpub: true,
+                            extensiones: ['epub'],
+                          ),
+                        ),
+                      ],
                     ),
-                    ListTile(
-                      leading: Icon(
-                        Icons.picture_as_pdf,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                      title: Text(
-                        'Añadir PDF',
-                        style: TextStyle(color: Theme.of(context).primaryColor),
-                      ),
-                      onTap: () => _agregarArchivoLocal(
-                        esPdf: true,
-                        esEpub: false,
-                        extensiones: ['pdf'],
-                      ),
-                    ),
-                    ListTile(
-                      leading: Icon(
-                        Icons.book,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                      title: Text(
-                        'Añadir Libro (ePub)',
-                        style: TextStyle(color: Theme.of(context).primaryColor),
-                      ),
-                      onTap: () => _agregarArchivoLocal(
-                        esPdf: false,
-                        esEpub: true,
-                        extensiones: ['epub'],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
+                  ),
+                );
+              },
+            ).animate().scale(
+              delay: 200.ms,
+              duration: 400.ms,
+              curve: Curves.easeOutBack,
+            ),
       ),
       // Si no hay documentos, mostramos una pantalla vacía elegante
       body: _documentos.isEmpty
@@ -1732,6 +2352,8 @@ class _NewsLoadingSkeletonState extends State<_NewsLoadingSkeleton>
     return FadeTransition(
       opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_controller),
       child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
         itemCount: 5, // Mostramos 5 elementos fantasma
         itemBuilder: (context, index) {

@@ -5,8 +5,10 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:epub_view/epub_view.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/local_db_service.dart';
 import '../services/dictionary_service.dart';
+import '../services/ai_translation_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final String titulo;
@@ -41,7 +43,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // Nuevos estados para funcionalidades avanzadas
   double _brillo = 1.0;
   String _modoVista = 'Vertical (Arriba/Abajo)'; // Opciones actualizadas
-  bool _modoTraduccion = false;
+  final bool _modoTraduccion = false;
   String _fontFamily = 'System'; // Tipografía activa
 
   // Nuevas variables para herramientas y temporizador
@@ -62,6 +64,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       GlobalKey(); // Llave para guardar el PDF
   final FlutterTts _flutterTts = FlutterTts();
   bool _isSpeaking = false;
+
+  // --- NUEVAS VARIABLES PARA DIBUJO/RESALTADO ---
+  final List<_Trazo> _trazos = [];
+  _Trazo? _trazoActual;
 
   // Función para cambiar el tema de lectura
   void _cambiarTema(String tema) {
@@ -135,9 +141,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
 
-    setState(() {
-      _cargandoProgreso = false;
-    });
+    if (mounted) {
+      setState(() {
+        _cargandoProgreso = false;
+      });
+    }
   }
 
   Future<void> _initBrightness() async {
@@ -252,15 +260,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
         final File file = File(widget.documentPath!);
         await file.writeAsBytes(documentBytes);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Anotaciones guardadas correctamente.',
-              style: TextStyle(color: Theme.of(context).primaryColor),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Anotaciones guardadas correctamente.',
+                style: TextStyle(color: Theme.of(context).primaryColor),
+              ),
+              backgroundColor: Theme.of(context).cardColor,
             ),
-            backgroundColor: Theme.of(context).cardColor,
-          ),
-        );
+          );
+        }
       } catch (e) {
         print("Error al guardar anotaciones en PDF: $e");
       }
@@ -586,8 +596,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                     setModalState(() {
                                       _drawMode = false;
                                       _noteMode = false;
-                                      if (_highlightColor == Colors.transparent)
+                                      if (_highlightColor ==
+                                          Colors.transparent) {
                                         _highlightColor = Colors.yellow;
+                                      } else {
+                                        _highlightColor = Colors
+                                            .transparent; // Permite apagar el resaltador
+                                      }
                                     });
                                     setState(() {});
                                   },
@@ -925,7 +940,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           IconButton(
             icon: const Icon(Icons.share_outlined),
             onPressed: () {
-              // Lógica para compartir
+              final textoCompartir = widget.documentPath != null
+                  ? 'Estoy leyendo "${widget.titulo}" en OmniLibrary. ¡Échale un vistazo!'
+                  : 'Lectura recomendada: "${widget.titulo}".\n\nOmniLibrary App';
+
+              Share.share(textoCompartir);
             },
           ),
           IconButton(
@@ -1083,9 +1102,65 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   );
 
-                  // Insertamos nuestro botón de "Resaltar" y "Notas"
+                  // Insertamos nuestro botón de "Resumir con IA"
                   buttonItems.insert(
                     2,
+                    ContextMenuButtonItem(
+                      label: '✨ Resumir con IA',
+                      onPressed: () async {
+                        final textEditingValue =
+                            editableTextState.textEditingValue;
+                        final selectedText = textEditingValue.selection
+                            .textInside(textEditingValue.text)
+                            .trim();
+
+                        ContextMenuController.removeAny();
+
+                        // Mostramos diálogo de carga
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: _backgroundColor,
+                            content: Row(
+                              children: [
+                                CircularProgressIndicator(
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    'Consultando a la IA...',
+                                    style: TextStyle(color: _textColor),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        final aiService = AiTranslationService();
+                        final resumen = await aiService.getResumen(
+                          widget.titulo,
+                          selectedText,
+                        );
+
+                        if (context.mounted) {
+                          Navigator.pop(
+                            context,
+                          ); // Cerramos el indicador de carga
+                          // Mostramos el resumen
+                          _mostrarDefinicion(
+                            resumen,
+                          ); // Reutilizamos tu método de diálogo, o creas uno nuevo
+                        }
+                      },
+                    ),
+                  );
+
+                  // Insertamos nuestro botón de "Resaltar" y "Notas"
+                  buttonItems.insert(
+                    3,
                     ContextMenuButtonItem(
                       label: '🖍️ Resaltar',
                       onPressed: () {
@@ -1130,41 +1205,81 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     // Verificamos si es un PDF online (para la simulación) o un archivo descargado localmente
-    if (widget.documentPath!.startsWith('http')) {
-      return SfPdfViewer.network(
-        widget.documentPath!,
-        key: _pdfViewerKey,
-        controller: _pdfViewerController,
-        scrollDirection: scrollDirection,
-        pageLayoutMode: pageLayoutMode,
-        onDocumentLoaded: (PdfDocumentLoadedDetails details) {
-          if (_paginaGuardadaPdf > 1)
-            _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
-        },
-        onPageChanged: (PdfPageChangedDetails details) {
-          LocalDbService.guardarProgreso(
-            'pdf_page_${widget.documentPath}',
-            details.newPageNumber,
+    final Widget viewer = widget.documentPath!.startsWith('http')
+        ? SfPdfViewer.network(
+            widget.documentPath!,
+            key: _pdfViewerKey,
+            controller: _pdfViewerController,
+            scrollDirection: scrollDirection,
+            pageLayoutMode: pageLayoutMode,
+            onDocumentLoaded: (PdfDocumentLoadedDetails details) {
+              if (_paginaGuardadaPdf > 1) {
+                _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
+              }
+            },
+            onPageChanged: (PdfPageChangedDetails details) {
+              LocalDbService.guardarProgreso(
+                'pdf_page_${widget.documentPath}',
+                details.newPageNumber,
+              );
+            },
+          )
+        : SfPdfViewer.file(
+            File(widget.documentPath!),
+            key: _pdfViewerKey,
+            controller: _pdfViewerController,
+            scrollDirection: scrollDirection,
+            pageLayoutMode: pageLayoutMode,
+            onDocumentLoaded: (PdfDocumentLoadedDetails details) {
+              if (_paginaGuardadaPdf > 1) {
+                _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
+              }
+            },
+            onPageChanged: (PdfPageChangedDetails details) {
+              LocalDbService.guardarProgreso(
+                'pdf_page_${widget.documentPath}',
+                details.newPageNumber,
+              );
+            },
           );
-        },
-      );
-    }
-    return SfPdfViewer.file(
-      File(widget.documentPath!),
-      key: _pdfViewerKey,
-      controller: _pdfViewerController,
-      scrollDirection: scrollDirection,
-      pageLayoutMode: pageLayoutMode,
-      onDocumentLoaded: (PdfDocumentLoadedDetails details) {
-        if (_paginaGuardadaPdf > 1)
-          _pdfViewerController.jumpToPage(_paginaGuardadaPdf);
-      },
-      onPageChanged: (PdfPageChangedDetails details) {
-        LocalDbService.guardarProgreso(
-          'pdf_page_${widget.documentPath}',
-          details.newPageNumber,
-        );
-      },
+
+    final bool modoAnotacionActivo =
+        _drawMode || (_highlightColor != Colors.transparent && !_noteMode);
+
+    return Stack(
+      children: [
+        viewer,
+        // Capa de dibujo que intercepta los toques solo si las herramientas están activas
+        if (modoAnotacionActivo)
+          Positioned.fill(
+            child: GestureDetector(
+              onPanStart: (details) {
+                setState(() {
+                  _trazoActual = _Trazo(
+                    puntos: [details.localPosition],
+                    color: _drawMode
+                        ? Theme.of(context).primaryColor
+                        : _highlightColor,
+                    esResaltador: !_drawMode,
+                  );
+                  _trazos.add(_trazoActual!);
+                });
+              },
+              onPanUpdate: (details) {
+                setState(() {
+                  _trazoActual?.puntos.add(details.localPosition);
+                });
+              },
+              onPanEnd: (details) {
+                setState(() => _trazoActual = null);
+              },
+              child: CustomPaint(
+                painter: _AnotacionPainter(_trazos),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1206,6 +1321,47 @@ class _ColorButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// --- CLASES AUXILIARES PARA EL SISTEMA DE DIBUJO ---
+class _Trazo {
+  final List<Offset> puntos;
+  final Color color;
+  final bool esResaltador;
+
+  _Trazo({
+    required this.puntos,
+    required this.color,
+    this.esResaltador = false,
+  });
+}
+
+class _AnotacionPainter extends CustomPainter {
+  final List<_Trazo> trazos;
+
+  _AnotacionPainter(this.trazos);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final trazo in trazos) {
+      final paint = Paint()
+        ..color = trazo.esResaltador
+            ? trazo.color.withOpacity(0.4)
+            : trazo.color
+        ..strokeCap = trazo.esResaltador ? StrokeCap.square : StrokeCap.round
+        ..strokeWidth = trazo.esResaltador
+            ? 22.0
+            : 3.0 // Resaltador ancho, lápiz delgado
+        ..style = PaintingStyle.stroke;
+
+      for (int i = 0; i < trazo.puntos.length - 1; i++) {
+        canvas.drawLine(trazo.puntos[i], trazo.puntos[i + 1], paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 // --- NUEVOS WIDGETS AUXILIARES PARA AJUSTES AVANZADOS ---

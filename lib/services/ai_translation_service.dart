@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AiTranslationService {
-  // Reemplaza esto con tu API Key real de Google AI Studio
-  static const String _geminiApiKey = 'AIzaSyCLmUTQT375WWYqhmkoNHKLYgcnxP9Qc2c';
+  // Extraemos la llave de forma segura usando flutter_dotenv (oculta en el archivo .env)
+  static String get _geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
 
   /// Genera un prompt contextualizado basado en el tipo de lectura,
   /// asegurando que el modelo de Inteligencia Artificial entienda las
@@ -61,19 +62,21 @@ class AiTranslationService {
     );
 
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [
-            {
-              "parts": [
-                {"text": prompt},
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              "contents": [
+                {
+                  "parts": [
+                    {"text": prompt},
+                  ],
+                },
               ],
-            },
-          ],
-        }),
-      );
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

@@ -80,4 +80,21 @@ class LocalDbService {
   static Future<void> guardarNoticias(String categoria, String xml) async {
     await _boxNoticias.put(categoria, xml);
   }
+
+  // --- Funciones Reales de Almacenamiento ---
+  static Future<void> limpiarCache() async {
+    await _boxNoticias.clear();
+  }
+
+  static String obtenerTamanoCache() {
+    int bytes = 0;
+    // Simulamos el peso en bytes sumando la longitud de los strings guardados
+    for (var xml in _boxNoticias.values) {
+      bytes += xml.toString().length;
+    }
+
+    if (bytes == 0) return '0 KB';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
 }

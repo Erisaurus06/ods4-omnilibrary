@@ -46,6 +46,10 @@ class OmniLibraryApp extends StatelessWidget {
       title: 'OmniLibrary',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: const Duration(
+        milliseconds: 600,
+      ), // Transición súper suave entre Claro/Oscuro
+      themeAnimationCurve: Curves.easeInOutCubic, // Curva de animación premium
       theme: ThemeData(
         fontFamily: '.SF Pro Text', // Fuerza San Francisco en iOS/macOS
         brightness: Brightness.light,
