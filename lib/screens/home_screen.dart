@@ -1,28 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:omnilibrary/screens/reader_screen.dart';
-import 'package:omnilibrary/services/wikipedia_service.dart';
-import 'package:omnilibrary/services/rss_service.dart';
-import 'package:dart_rss/dart_rss.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:omnilibrary/services/storage_service.dart';
 import 'package:provider/provider.dart';
-import 'package:omnilibrary/services/news_filter_service.dart';
 import '../providers/theme_provider.dart';
-import '../providers/library_provider.dart';
-import '../providers/news_provider.dart';
-import '../providers/explore_provider.dart';
 import '../services/local_db_service.dart';
 import 'dart:io';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
-import '../services/ai_translation_service.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/supabase_service.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/google_search_service.dart';
-import '../services/google_books_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,9 +23,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _indiceActual = 0; // Controla en qué pestaña estamos
 
+  // Lista de pantallas actualizada con la nueva sección de Apuntes
   final List<Widget> _pantallas = [
-    const _SeccionExplorar(),
-    const _SeccionNoticias(),
+    const _SeccionApuntes(),
+    const _SeccionFlashcards(),
     const _SeccionBiblioteca(),
     const _SeccionAjustes(),
   ];
@@ -94,28 +84,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w500,
                   ),
                   items: const [
+                    // 1. Item de "Apuntes"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
-                        child: Icon(Icons.explore_outlined),
+                        child: Icon(Icons.sticky_note_2_outlined),
                       ),
                       activeIcon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
-                        child: Icon(Icons.explore),
+                        child: Icon(Icons.sticky_note_2),
                       ),
-                      label: 'Explorar',
+                      label: 'Apuntes',
                     ),
+                    // 2. Item de "Flashcards"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
-                        child: Icon(Icons.newspaper_outlined),
+                        child: Icon(Icons.style_outlined),
                       ),
                       activeIcon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
-                        child: Icon(Icons.newspaper),
+                        child: Icon(Icons.style),
                       ),
-                      label: 'Noticias',
+                      label: 'Flashcards',
                     ),
+                    // 3. Item de "Biblioteca"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
@@ -127,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       label: 'Biblioteca',
                     ),
+                    // 3. Item de "Ajustes" (se mantiene)
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
@@ -144,6 +138,1180 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// --- SECCIÓN 1: APUNTES (Funcionalidad de Post-its) ---
+
+class _SeccionApuntes extends StatefulWidget {
+  const _SeccionApuntes();
+
+  @override
+  State<_SeccionApuntes> createState() => _SeccionApuntesState();
+}
+
+class _SeccionApuntesState extends State<_SeccionApuntes> {
+  // 1. Controladores para el modal de creación
+  final _tituloController = TextEditingController();
+  final _contenidoController = TextEditingController();
+
+  // 2. Lista persistente de apuntes (Post-its)
+  List<Map<String, String>> _misApuntes = [];
+
+  int _modoVistaApuntes = 0; // 0: Muro de Notas, 1: Libreta de Tareas
+  List<Map<String, dynamic>> _misTareas = [
+    {
+      'titulo': 'Terminar el proyecto de ciencias',
+      'completada': false,
+      'fecha': 'Mañana, 10:00 AM',
+    },
+    {
+      'titulo': 'Comprar libros de texto',
+      'completada': true,
+      'fecha': 'Hoy, 5:00 PM',
+    },
+    {
+      'titulo': 'Repasar fichas de estudio de inglés',
+      'completada': false,
+      'fecha': 'Sábado, 12:00 PM',
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarApuntes();
+  }
+
+  void _cargarApuntes() {
+    setState(() {
+      _misApuntes = LocalDbService.obtenerNotas();
+      // Si la memoria está vacía (primera vez que usa la app), inyectamos un ejemplo
+      if (_misApuntes.isEmpty) {
+        _misApuntes = [
+          {
+            'titulo': 'Idea para App 💡',
+            'contenido':
+                'Un Tinder para libros. Deslizas portadas y si hay match, te recomienda leerlo.',
+            'color': '0xFFFFF59D',
+            'fecha': DateTime.now().toIso8601String(),
+          },
+          {
+            'titulo': 'Frase del día',
+            'contenido':
+                'La única forma de hacer un gran trabajo es amar lo que haces. - Steve Jobs',
+            'color': '0xFFB39DDB',
+            'fecha': DateTime.now().toIso8601String(),
+          },
+        ];
+        LocalDbService.guardarNotas(_misApuntes); // Las guardamos en disco
+      }
+    });
+  }
+
+  String _formatearFecha(String? isoDate) {
+    if (isoDate == null) return '';
+    try {
+      final date = DateTime.parse(isoDate);
+      final meses = [
+        'Ene',
+        'Feb',
+        'Mar',
+        'Abr',
+        'May',
+        'Jun',
+        'Jul',
+        'Ago',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dic',
+      ];
+      return '${date.day} ${meses[date.month - 1]}, ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 3. Método para mostrar el modal de creación de apuntes
+  void _mostrarCreadorDeApuntes(
+    BuildContext context, {
+    Map<String, String>? apunteExistente,
+    int? index,
+  }) {
+    String selectedColor =
+        apunteExistente?['color'] ?? '0xFF90CAF9'; // Azul pastel por defecto
+    _tituloController.text = apunteExistente?['titulo'] ?? '';
+    _contenidoController.text = apunteExistente?['contenido'] ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // CRÍTICO para que el teclado no tape
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              // Padding dinámico que se ajusta al teclado del celular
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Selector de Color Pastel
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children:
+                              [
+                                '0xFFFFF59D', // Amarillo
+                                '0xFFB39DDB', // Morado
+                                '0xFFA5D6A7', // Verde
+                                '0xFF90CAF9', // Azul
+                                '0xFFFFAB91', // Naranja/Salmón
+                              ].map((colorHex) {
+                                final isSelected = selectedColor == colorHex;
+                                return GestureDetector(
+                                  onTap: () => setModalState(
+                                    () => selectedColor = colorHex,
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: isSelected ? 40 : 32,
+                                    height: isSelected ? 40 : 32,
+                                    decoration: BoxDecoration(
+                                      color: Color(int.parse(colorHex)),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context).primaryColor
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        // Campo de texto para el Título (Cara frontal)
+                        TextField(
+                          controller: _tituloController,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Título del apunte',
+                            border: InputBorder.none,
+                          ),
+                          textCapitalization: TextCapitalization.sentences,
+                        ),
+                        const SizedBox(height: 16),
+                        // Barra de herramientas de edición (Simulada para Rich Text)
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.format_bold),
+                                onPressed: () {},
+                                tooltip: 'Negrita',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_italic),
+                                onPressed: () {},
+                                tooltip: 'Cursiva',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_underline),
+                                onPressed: () {},
+                                tooltip: 'Subrayado',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_list_bulleted),
+                                onPressed: () {},
+                                tooltip: 'Lista',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.code),
+                                onPressed: () {},
+                                tooltip: 'Código',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.link),
+                                onPressed: () {},
+                                tooltip: 'Enlace',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.text_fields),
+                                onPressed: () {},
+                                tooltip: 'Tamaño de fuente',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Campo de texto para el Contenido (multilínea, Cara trasera)
+                        Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(context).size.height * 0.4,
+                          ),
+                          child: SingleChildScrollView(
+                            child: TextField(
+                              controller: _contenidoController,
+                              maxLines: null,
+                              minLines: 5,
+                              style: const TextStyle(fontSize: 16, height: 1.5),
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'Escribe aquí tu nota...\nSoporta textos largos.',
+                                border: InputBorder.none,
+                              ),
+                              textCapitalization: TextCapitalization.sentences,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        // Botón de Guardar
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final titulo = _tituloController.text;
+                              final contenido = _contenidoController.text;
+
+                              if (titulo.isNotEmpty && contenido.isNotEmpty) {
+                                setState(() {
+                                  if (apunteExistente != null &&
+                                      index != null) {
+                                    _misApuntes[index] = {
+                                      'titulo': titulo,
+                                      'contenido': contenido,
+                                      'color': selectedColor,
+                                      'fecha':
+                                          apunteExistente['fecha'] ??
+                                          DateTime.now().toIso8601String(),
+                                    };
+                                  } else {
+                                    _misApuntes.insert(0, {
+                                      'titulo': titulo,
+                                      'contenido': contenido,
+                                      'color': selectedColor,
+                                      'fecha': DateTime.now().toIso8601String(),
+                                    });
+                                  }
+                                });
+                                LocalDbService.guardarNotas(_misApuntes);
+                                _tituloController.clear();
+                                _contenidoController.clear();
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).scaffoldBackgroundColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              apunteExistente != null
+                                  ? 'Actualizar Apunte'
+                                  : 'Guardar Apunte',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent, // Para que se vea el fondo global
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: Text(
+          _modoVistaApuntes == 0 ? 'Muro de Notas 📌' : 'Mis Tareas 📅',
+          style: const TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.2,
+          ),
+        ),
+        toolbarHeight: 120,
+        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ChoiceChip(
+                  label: const Text('Muro de Notas'),
+                  selected: _modoVistaApuntes == 0,
+                  onSelected: (val) => setState(() => _modoVistaApuntes = 0),
+                ),
+                const SizedBox(width: 16),
+                ChoiceChip(
+                  label: const Text('Libreta de Tareas'),
+                  selected: _modoVistaApuntes == 1,
+                  onSelected: (val) => setState(() => _modoVistaApuntes = 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      // 4. Botón flotante para crear nuevas notas
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0),
+        child: FloatingActionButton(
+          onPressed: () {
+            if (_modoVistaApuntes == 0) {
+              _mostrarCreadorDeApuntes(context);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Modal para nueva tarea en desarrollo.'),
+                ),
+              );
+            }
+          },
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+          child: const Icon(Icons.add),
+        ),
+      ),
+      body: _modoVistaApuntes == 0
+          ? _construirMuroDeNotas()
+          : _construirLibretaTareas(),
+    );
+  }
+
+  Widget _construirMuroDeNotas() {
+    return Container(
+      // Fondo estilo pared/corcho/refrigerador
+      decoration: BoxDecoration(
+        color: Colors.blueGrey[50], // Tono de refrigerador o pared
+        image: const DecorationImage(
+          image: NetworkImage(
+            'https://www.transparenttextures.com/patterns/white-wall.png',
+          ),
+          repeat: ImageRepeat.repeat,
+        ),
+      ),
+      child: GridView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 20,
+          mainAxisSpacing: 20,
+        ),
+        itemCount: _misApuntes.length,
+        itemBuilder: (context, index) {
+          final apunte = _misApuntes[index];
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () => _mostrarCreadorDeApuntes(
+                  context,
+                  apunteExistente: apunte,
+                  index: index,
+                ),
+                onLongPress: () => _confirmarEliminar(index),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                  decoration: BoxDecoration(
+                    color: Color(int.parse(apunte['color']!)),
+                    borderRadius: BorderRadius.circular(
+                      4,
+                    ), // Notas cuadradas estilo Post-It
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(2, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        apunte['titulo']!,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (apunte.containsKey('fecha')) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatearFecha(apunte['fecha']),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.black.withOpacity(0.4),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Text(
+                          apunte['contenido']!,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.4,
+                            color: Colors.black87,
+                          ),
+                          overflow: TextOverflow.fade,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Chincheta / Imán superior
+              Positioned(
+                top: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.red[400],
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _construirLibretaTareas() {
+    return Container(
+      // Fondo simulando líneas de una mini libreta
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.yellow[50],
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListView.separated(
+        padding: const EdgeInsets.only(top: 16, bottom: 120),
+        itemCount: _misTareas.length,
+        separatorBuilder: (context, index) =>
+            Divider(color: Colors.blue[200], height: 1),
+        itemBuilder: (context, index) {
+          final tarea = _misTareas[index];
+          final isCompletada = tarea['completada'] as bool;
+          return ListTile(
+            leading: InkWell(
+              onTap: () {
+                setState(() {
+                  _misTareas[index]['completada'] = !isCompletada;
+                });
+              },
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCompletada ? Colors.green : Colors.grey,
+                    width: 2,
+                  ),
+                  color: isCompletada ? Colors.green : Colors.transparent,
+                ),
+                child: isCompletada
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
+              ),
+            ),
+            title: Text(
+              tarea['titulo'],
+              style: TextStyle(
+                fontSize: 16,
+                decoration: isCompletada ? TextDecoration.lineThrough : null,
+                color: isCompletada ? Colors.grey : Colors.black87,
+              ),
+            ),
+            subtitle: Row(
+              children: [
+                Icon(
+                  Icons.access_time,
+                  size: 14,
+                  color: isCompletada ? Colors.grey : Colors.redAccent,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  tarea['fecha'],
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCompletada ? Colors.grey : Colors.redAccent,
+                  ),
+                ),
+              ],
+            ),
+            trailing: IconButton(
+              icon: const Icon(
+                Icons.notifications_active_outlined,
+                color: Colors.blueAccent,
+              ),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Recordatorio programado con el calendario.'),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmarEliminar(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Eliminar apunte',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          '¿Deseas eliminar este apunte?',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor.withOpacity(0.8),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _misApuntes.removeAt(index);
+              });
+              LocalDbService.guardarNotas(_misApuntes);
+            },
+            child: const Text(
+              'Sí',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- SECCIÓN 2: FLASHCARDS (Tarjetas giratorias de estudio) ---
+class _SeccionFlashcards extends StatefulWidget {
+  const _SeccionFlashcards();
+
+  @override
+  State<_SeccionFlashcards> createState() => _SeccionFlashcardsState();
+}
+
+class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
+  final _tituloController = TextEditingController();
+  final _contenidoController = TextEditingController();
+  List<Map<String, String>> _misFlashcards = [];
+
+  int _modoFlashcards =
+      0; // 0: Mis Tarjetas, 1: Modo Estudio (Quiz), 2: Bloques de Notas
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarFlashcards();
+  }
+
+  void _cargarFlashcards() {
+    setState(() {
+      _misFlashcards = LocalDbService.obtenerFlashcards();
+    });
+  }
+
+  void _mostrarCreadorDeFlashcards(
+    BuildContext context, {
+    Map<String, String>? flashcardExistente,
+    int? index,
+  }) {
+    String selectedColor =
+        flashcardExistente?['color'] ?? '0xFF90CAF9'; // Azul pastel por defecto
+    _tituloController.text = flashcardExistente?['titulo'] ?? '';
+    _contenidoController.text = flashcardExistente?['contenido'] ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children:
+                              [
+                                '0xFFFFF59D',
+                                '0xFFB39DDB',
+                                '0xFFA5D6A7',
+                                '0xFF90CAF9',
+                                '0xFFFFAB91',
+                              ].map((colorHex) {
+                                final isSelected = selectedColor == colorHex;
+                                return GestureDetector(
+                                  onTap: () => setModalState(
+                                    () => selectedColor = colorHex,
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: isSelected ? 40 : 32,
+                                    height: isSelected ? 40 : 32,
+                                    decoration: BoxDecoration(
+                                      color: Color(int.parse(colorHex)),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context).primaryColor
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _tituloController,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Concepto (Frente)',
+                            border: InputBorder.none,
+                          ),
+                          textCapitalization: TextCapitalization.sentences,
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(context).size.height * 0.4,
+                          ),
+                          child: SingleChildScrollView(
+                            child: TextField(
+                              controller: _contenidoController,
+                              maxLines: null,
+                              minLines: 5,
+                              style: const TextStyle(fontSize: 16, height: 1.5),
+                              decoration: const InputDecoration(
+                                hintText: 'Respuesta / Apunte (Reverso)...',
+                                border: InputBorder.none,
+                              ),
+                              textCapitalization: TextCapitalization.sentences,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final titulo = _tituloController.text;
+                              final contenido = _contenidoController.text;
+                              if (titulo.isNotEmpty && contenido.isNotEmpty) {
+                                setState(() {
+                                  if (flashcardExistente != null &&
+                                      index != null) {
+                                    _misFlashcards[index] = {
+                                      'titulo': titulo,
+                                      'contenido': contenido,
+                                      'color': selectedColor,
+                                    };
+                                  } else {
+                                    _misFlashcards.insert(0, {
+                                      'titulo': titulo,
+                                      'contenido': contenido,
+                                      'color': selectedColor,
+                                    });
+                                  }
+                                });
+                                LocalDbService.guardarFlashcards(
+                                  _misFlashcards,
+                                );
+                                _tituloController.clear();
+                                _contenidoController.clear();
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).scaffoldBackgroundColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              flashcardExistente != null
+                                  ? 'Actualizar Flashcard'
+                                  : 'Crear Flashcard',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmarEliminar(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Eliminar Flashcard',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          '¿Deseas eliminar esta tarjeta de memoria?',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor.withOpacity(0.8),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _misFlashcards.removeAt(index));
+              LocalDbService.guardarFlashcards(_misFlashcards);
+            },
+            child: const Text(
+              'Sí',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: Text(
+          _modoFlashcards == 0
+              ? 'Flashcards 🎴'
+              : _modoFlashcards == 1
+              ? 'Modo Estudio 🧠'
+              : 'Bloques de Notas 📚',
+          style: const TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.2,
+          ),
+        ),
+        toolbarHeight: 120,
+        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Tarjetas'),
+                    selected: _modoFlashcards == 0,
+                    onSelected: (val) => setState(() => _modoFlashcards = 0),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Quizlet / Estudio'),
+                    selected: _modoFlashcards == 1,
+                    onSelected: (val) => setState(() => _modoFlashcards = 1),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Apuntes de Estudio'),
+                    selected: _modoFlashcards == 2,
+                    onSelected: (val) => setState(() => _modoFlashcards = 2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0),
+        child: FloatingActionButton(
+          onPressed: () => _modoFlashcards == 0
+              ? _mostrarCreadorDeFlashcards(context)
+              : null,
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+          child: const Icon(Icons.add),
+        ),
+      ),
+      body: _modoFlashcards == 0
+          ? _construirGridTarjetas()
+          : _modoFlashcards == 1
+          ? _construirModoEstudio()
+          : _construirBloquesNotas(),
+    );
+  }
+
+  Widget _construirGridTarjetas() {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: _misFlashcards.length,
+      itemBuilder: (context, index) {
+        final flashcard = _misFlashcards[index];
+        return _FlashcardItem(
+          nota: flashcard,
+          onLongPress: () => _confirmarEliminar(index),
+          onEdit: () => _mostrarCreadorDeFlashcards(
+            context,
+            flashcardExistente: flashcard,
+            index: index,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _construirModoEstudio() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.school, size: 80, color: Colors.blueAccent),
+          const SizedBox(height: 16),
+          const Text(
+            'Modo Estudio Interactivo',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Repasa tus tarjetas en formato de Quiz\npara mejorar tu retención.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Iniciando sesión de estudio...')),
+              );
+            },
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Iniciar Quiz'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirBloquesNotas() {
+    return Center(
+      child: Text(
+        'Aquí se mostrarán tus bloques de notas estructuradas\npara repasar antes del Quiz.',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 16, color: Colors.grey),
+      ),
+    );
+  }
+}
+
+// --- WIDGET EXCLUSIVO DE FLASHCARD ANIMADA ---
+class _FlashcardItem extends StatefulWidget {
+  final Map<String, String> nota;
+  final VoidCallback onLongPress;
+  final VoidCallback onEdit;
+
+  const _FlashcardItem({
+    required this.nota,
+    required this.onLongPress,
+    required this.onEdit,
+  });
+
+  @override
+  State<_FlashcardItem> createState() => _FlashcardItemState();
+}
+
+class _FlashcardItemState extends State<_FlashcardItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  bool _isFront = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _animation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutBack),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _flipCard() {
+    if (_isFront) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+    _isFront = !_isFront;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _flipCard,
+      onLongPress: widget.onLongPress,
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          final angle = _animation.value * math.pi;
+          final transform = Matrix4.identity()
+            ..setEntry(3, 2, 0.001) // Perspectiva 3D
+            ..rotateY(angle);
+
+          final isBackShowing = angle > math.pi / 2;
+
+          return Transform(
+            transform: transform,
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Color(int.parse(widget.nota['color']!)),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: isBackShowing
+                  ? Transform(
+                      transform: Matrix4.identity()
+                        ..rotateY(
+                          math.pi,
+                        ), // Para que el texto no se vea en espejo
+                      alignment: Alignment.center,
+                      child: Stack(
+                        children: [
+                          Center(
+                            child: SingleChildScrollView(
+                              child: Text(
+                                widget.nota['contenido']!,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  height: 1.4,
+                                  color: Colors.black87,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: -12,
+                            right: -12,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: Colors.black54,
+                                size: 20,
+                              ),
+                              onPressed: widget.onEdit,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Stack(
+                      children: [
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: Text(
+                                  widget.nota['titulo']!,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 4,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.flip_camera_android,
+                              color: Colors.black.withOpacity(0.2),
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                        Positioned(
+                          top: -12,
+                          right: -12,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              color: Colors.black54,
+                              size: 20,
+                            ),
+                            onPressed: widget.onEdit,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -203,10 +1371,12 @@ void _mostrarVincularGoogleBooks(BuildContext context) {
                 onPressed: () async {
                   try {
                     // The `signIn` method is now `authenticate`, and scopes are passed here.
-                    final account = await googleSignIn.authenticate(scopeHint: [
-                      'email',
-                      'https://www.googleapis.com/auth/books'
-                    ]);
+                    final account = await googleSignIn.authenticate(
+                      scopeHint: [
+                        'email',
+                        'https://www.googleapis.com/auth/books',
+                      ],
+                    );
 
                     Navigator.pop(context); // Cierra el modal inferior
                     // `authenticate` throws on failure, so `account` will not be null here.
@@ -307,23 +1477,41 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         backgroundColor: Theme.of(context).cardColor,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         title: Text(
                           'Cerrar Sesión',
-                          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         content: Text(
                           '¿Estás seguro de que deseas salir de tu cuenta?',
-                          style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.8)),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.8),
+                          ),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                            child: const Text(
+                              'Cancelar',
+                              style: TextStyle(color: Colors.grey),
+                            ),
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Salir', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'Salir',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -410,28 +1598,6 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                const _ApiTile(
-                  titulo: 'Wikipedia API',
-                  subtitulo: 'Búsquedas globales',
-                  icono: Icons.language,
-                  conectado: true,
-                ),
-                Divider(
-                  height: 1,
-                  indent: 54,
-                  color: Theme.of(context).dividerColor.withOpacity(0.5),
-                ),
-                const _ApiTile(
-                  titulo: 'Noticias RSS',
-                  subtitulo: 'Actualidad',
-                  icono: Icons.rss_feed,
-                  conectado: true,
-                ),
-                Divider(
-                  height: 1,
-                  indent: 54,
-                  color: Theme.of(context).dividerColor.withOpacity(0.5),
-                ),
                 _ApiTile(
                   titulo: 'Google Play Books',
                   subtitulo: 'Autenticación',
@@ -697,1219 +1863,7 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-// --- SECCIÓN 1: EXPLORAR (Lo que ya teníamos programado) ---
-class _SeccionExplorar extends StatefulWidget {
-  const _SeccionExplorar();
-
-  @override
-  State<_SeccionExplorar> createState() => _SeccionExplorarState();
-}
-
-class _SeccionExplorarState extends State<_SeccionExplorar> {
-  bool _isSearching = false;
-  String _filtroActual = 'Todo';
-  List<dynamic> _wikiResultados = [];
-  List<dynamic> _pdfResultados = [];
-  List<dynamic> _booksResultados = [];
-  List<dynamic> _fuentesConfiablesResultados = [];
-  List<dynamic> _webResultados =
-      []; // NUEVA: Para búsquedas libres (patos, bicis)
-  bool _busquedaRealizada = false;
-
-  Future<void> _buscarMultifuente(String query) async {
-    if (query.trim().isEmpty) {
-      setState(
-        () => _busquedaRealizada = false,
-      ); // Reinicia a vista de recomendaciones
-      return;
-    }
-    setState(() {
-      _isSearching = true;
-      _busquedaRealizada = true;
-    });
-
-    try {
-      // Ejecutamos las 5 APIs en paralelo, manejando errores de forma individual.
-      // Así, si las APIs de Google fallan (por ej. falta de API Key), no bloquean todo el buscador.
-      final results = await Future.wait([
-        WikipediaService.buscarArticulos(query).catchError((e) {
-          debugPrint('Error en Wikipedia: $e');
-          return <dynamic>[];
-        }),
-        GoogleSearchService.buscarDocumentosConfiables(query).catchError((e) {
-          debugPrint('Error en Google Docs: $e');
-          return <dynamic>[];
-        }),
-        GoogleBooksService.buscarLibros(query).catchError((e) {
-          debugPrint('Error en Google Books: $e');
-          return <dynamic>[];
-        }),
-        GoogleSearchService.buscarArticulosConfiables(query).catchError((e) {
-          debugPrint('Error en Google Articles: $e');
-          return <dynamic>[];
-        }),
-        GoogleSearchService.buscarWebGeneral(query).catchError((e) {
-          debugPrint('Error en Google Web: $e');
-          return <dynamic>[];
-        }),
-      ]);
-
-      setState(() {
-        _wikiResultados = (results[0] as List<dynamic>?) ?? [];
-        _pdfResultados = (results[1] as List<dynamic>?) ?? [];
-        _booksResultados = (results[2] as List<dynamic>?) ?? [];
-        _fuentesConfiablesResultados = (results[3] as List<dynamic>?) ?? [];
-        _webResultados = (results[4] as List<dynamic>?) ?? [];
-      });
-    } catch (e) {
-      print('Error en búsqueda multifuente: $e');
-    } finally {
-      setState(() => _isSearching = false);
-    }
-  }
-
-  Future<void> _abrirEnNavegador(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      // Llama a la API de un navegador seguro e incrustado (Safari View Controller o Custom Tabs)
-      await launchUrl(uri, mode: LaunchMode.inAppWebView);
-    }
-  }
-
-  // --- RECOMENDACIONES BASE VÁLIDAS ---
-  Widget _buildRecomendaciones() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Recomendaciones Confiables',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        const _TarjetaArticulo(
-          titulo: 'Avances en Inteligencia Artificial',
-          fuente: 'MIT Technology Review',
-          tiempoLectura: 'Artículo',
-          isDestacado: true,
-          contenido:
-              'Descubre cómo los últimos modelos generativos están redefiniendo el futuro y la ciencia actual.',
-          articleUrl: 'https://www.technologyreview.com/',
-        ),
-        const SizedBox(height: 12),
-        const _TarjetaArticulo(
-          titulo: 'Los misterios del Universo Profundo',
-          fuente: 'National Geographic',
-          tiempoLectura: 'Lectura',
-          contenido:
-              'Nuevas imágenes de misiones espaciales revelan galaxias muy antiguas.',
-          articleUrl: 'https://www.nationalgeographic.com/science/space',
-        ),
-        const SizedBox(height: 12),
-        const _TarjetaArticulo(
-          titulo: 'Diccionario de la lengua española',
-          fuente: 'Real Academia Española (RAE)',
-          tiempoLectura: 'Referencia',
-          contenido:
-              'Consulta la principal obra de referencia para despejar dudas del idioma español.',
-          articleUrl: 'https://dle.rae.es/',
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('OmniLibrary'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.headphones_outlined),
-            tooltip: 'Escuchar en TecConnection',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Integración con TecConnection próximamente 🎧'),
-                  backgroundColor: Theme.of(context).cardColor,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-        children: [
-          const Text(
-            '¿Qué quieres\naprender hoy?',
-            style: TextStyle(
-              fontSize: 32, // Título largo estilo LargeTitle de iOS
-              fontWeight: FontWeight.w800,
-              letterSpacing: -1.5, // SF Pro Display negativo
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 24),
-          _BuscadorUniversal(onBuscar: (query) => _buscarMultifuente(query)),
-          const SizedBox(height: 24),
-          _FiltrosCategorias(
-            filtroSeleccionado: _filtroActual,
-            onFiltroCambiado: (String nuevoFiltro) {
-              setState(() => _filtroActual = nuevoFiltro);
-            },
-          ),
-          const SizedBox(height: 36),
-          const Text(
-            'Resultados de la Búsqueda',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 16),
-          _isSearching
-              ? const Padding(
-                  padding: EdgeInsets.only(top: 20.0),
-                  child: _NewsLoadingSkeleton(), // Usamos la animación premium en lugar de un círculo
-                )
-              : !_busquedaRealizada
-              ? _buildRecomendaciones() // Muestra sugerencias buenas si el usuario no ha buscado
-              : (_wikiResultados.isEmpty &&
-                    _pdfResultados.isEmpty &&
-                    _booksResultados.isEmpty &&
-                    _fuentesConfiablesResultados.isEmpty &&
-                    _webResultados.isEmpty)
-              ? const Text('Sin resultados. Intenta con otros términos.')
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // --- RESULTADOS GOOGLE BOOKS ---
-                    if ((_filtroActual == 'Todo' ||
-                            _filtroActual == 'Libros') &&
-                        _booksResultados.isNotEmpty) ...[
-                      const Text(
-                        'Libros Encontrados (Google Books)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._booksResultados.take(3).map((libro) {
-                        final volumeInfo = libro['volumeInfo'] ?? {};
-                        final imageLinks = volumeInfo['imageLinks'] ?? {};
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: _TarjetaArticulo(
-                            titulo: volumeInfo['title'] ?? 'Sin título',
-                            fuente: 'Google Books',
-                            tiempoLectura: volumeInfo['authors'] is List
-                                ? (volumeInfo['authors'] as List).join(', ')
-                                : (volumeInfo['authors']?.toString() ??
-                                      'Desconocido'),
-                            contenido:
-                                volumeInfo['description'] ?? 'Sin descripción.',
-                            imageUrl: imageLinks['thumbnail']?.replaceFirst(
-                              'http:',
-                              'https:',
-                            ),
-                            articleUrl: volumeInfo['infoLink'],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                    ],
-                    // --- RESULTADOS FUENTES CONFIABLES ---
-                    if ((_filtroActual == 'Todo' || _filtroActual == 'Web') &&
-                        _fuentesConfiablesResultados.isNotEmpty) ...[
-                      const Text(
-                        'Enciclopedias y Académicas (Britannica, RAE, Stanford...)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._fuentesConfiablesResultados.take(3).map((articulo) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: _TarjetaArticulo(
-                            titulo: articulo['title'] ?? 'Artículo confiable',
-                            fuente: articulo['displayLink'] ?? 'Enciclopedia',
-                            tiempoLectura: 'Artículo',
-                            contenido: articulo['snippet'] ?? '',
-                            articleUrl: articulo['link'],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                    ],
-                    // --- RESULTADOS PDFs DE LA WEB ---
-                    if ((_filtroActual == 'Todo' || _filtroActual == 'PDFs') &&
-                        _pdfResultados.isNotEmpty) ...[
-                      const Text(
-                        'Documentos PDF Confiables',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.redAccent,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._pdfResultados.take(3).map((pdf) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: _TarjetaArticulo(
-                            titulo: pdf['title'] ?? 'Documento PDF',
-                            fuente: 'Web (Académica)',
-                            tiempoLectura: 'PDF',
-                            contenido: pdf['snippet'] ?? '',
-                            articleUrl: pdf['link'],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                    ],
-                    // --- RESULTADOS WIKIPEDIA ---
-                    if ((_filtroActual == 'Todo' ||
-                            _filtroActual == 'Wikipedia') &&
-                        _wikiResultados.isNotEmpty) ...[
-                      const Text(
-                        'Conceptos Base (Wikipedia)',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._wikiResultados.take(4).map((wiki) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: _TarjetaArticulo(
-                            titulo: wiki['title'],
-                            fuente: 'Wikipedia',
-                            tiempoLectura: 'Concepto',
-                            contenido:
-                                (wiki['snippet'] ?? '') +
-                                '\n\n(Toca para leer completo en la web)',
-                            articleUrl:
-                                'https://es.wikipedia.org/wiki/${Uri.encodeComponent(wiki['title'] ?? '')}',
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                    ],
-                    // --- RESULTADOS WEB GENERALES (PATO, BICICLETA, ETC) ---
-                    if ((_filtroActual == 'Todo' || _filtroActual == 'Web') &&
-                        _webResultados.isNotEmpty) ...[
-                      const Text(
-                        'Resultados Web Generales',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._webResultados.take(4).map((articulo) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: _TarjetaArticulo(
-                            titulo: articulo['title'] ?? 'Resultado Web',
-                            fuente: articulo['displayLink'] ?? 'Web',
-                            tiempoLectura: 'Página Web',
-                            contenido: articulo['snippet'] ?? '',
-                            articleUrl: articulo['link'],
-                          ),
-                        );
-                      }),
-                    ],
-                  ],
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Mantenemos los widgets de _BuscadorUniversal, _FiltrosCategorias y _TarjetaArticulo igual que antes ---
-// --- COMPONENTES (WIDGETS) REUTILIZABLES ---
-
-class _BuscadorUniversal extends StatefulWidget {
-  final Function(String) onBuscar; // Recibimos la función
-
-  const _BuscadorUniversal({required this.onBuscar});
-
-  @override
-  State<_BuscadorUniversal> createState() => _BuscadorUniversalState();
-}
-
-class _BuscadorUniversalState extends State<_BuscadorUniversal> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: _controller,
-      onSubmitted:
-          widget.onBuscar, // Activa la búsqueda al dar "Enter" en el teclado
-      textInputAction: TextInputAction.search, // Cambia el botón a una lupa
-      decoration: InputDecoration(
-        hintText: 'Buscar conceptos, noticias...',
-        hintStyle: TextStyle(
-          color: Theme.of(context).primaryColor.withOpacity(0.5),
-        ),
-        prefixIcon: Icon(
-          Icons.search,
-          color: Theme.of(context).primaryColor.withOpacity(0.6),
-        ),
-        suffixIcon: IconButton(
-          icon: Icon(
-            Icons.cancel_outlined, // Icono de limpieza minimalista
-            color: Theme.of(context).primaryColor.withOpacity(0.4),
-          ),
-          onPressed: () {
-            _controller.clear();
-            // Opcional: enfocar el teclado de nuevo aquí si se desea
-          },
-        ),
-        filled: true,
-        fillColor: Theme.of(
-          context,
-        ).primaryColor.withOpacity(0.06), // Fondo de búsqueda iOS (gris tenue)
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 10.0, // Altura exacta de iOS
-          horizontal: 16.0,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10), // iOS Search Bar Standard
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: Theme.of(context).primaryColor.withOpacity(0.3),
-            width: 1.0,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FiltrosCategorias extends StatelessWidget {
-  final String filtroSeleccionado;
-  final Function(String) onFiltroCambiado;
-
-  const _FiltrosCategorias({
-    required this.filtroSeleccionado,
-    required this.onFiltroCambiado,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildChip('Todo', filtroSeleccionado == 'Todo', context),
-          _buildChip('Wikipedia', filtroSeleccionado == 'Wikipedia', context),
-          _buildChip('Web', filtroSeleccionado == 'Web', context),
-          _buildChip('Libros', filtroSeleccionado == 'Libros', context),
-          _buildChip('PDFs', filtroSeleccionado == 'PDFs', context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, bool isSelected, BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
-    final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 10.0),
-      child: ChoiceChip(
-        label: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? scaffoldBg : primaryColor,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-        selected: isSelected,
-        onSelected: (bool value) {
-          HapticFeedback.lightImpact();
-          onFiltroCambiado(label);
-        },
-        selectedColor: primaryColor,
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
-          side: BorderSide.none,
-        ),
-      ),
-    );
-  }
-}
-
-// --- NUEVA TARJETA DE ARTÍCULO (Soporta Imágenes y Links) ---
-class _TarjetaArticulo extends StatelessWidget {
-  final String titulo;
-  final String fuente;
-  final String tiempoLectura;
-  final bool isDestacado;
-  final String? contenido;
-  final String? imageUrl; // NUEVO: Para la foto de la noticia
-  final String? articleUrl; // NUEVO: Para abrir la web original
-
-  const _TarjetaArticulo({
-    required this.titulo,
-    required this.fuente,
-    required this.tiempoLectura,
-    this.isDestacado = false,
-    this.contenido,
-    this.imageUrl,
-    this.articleUrl,
-  });
-
-  Future<void> _abrirEnNavegador(BuildContext context) async {
-    if (articleUrl != null && articleUrl!.isNotEmpty) {
-      final uri = Uri.parse(articleUrl!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.inAppWebView,
-        ); // Api de In-App Browser Seguro!
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'No se pudo abrir el enlace',
-              style: TextStyle(color: Theme.of(context).primaryColor),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        // Si tiene un link web, abrimos el navegador. Si no, tratamos de abrir el Súper Lector.
-        if (articleUrl != null) {
-          _abrirEnNavegador(context);
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ReaderScreen(
-                titulo: titulo,
-                fuente: fuente,
-                contenido: contenido,
-              ),
-            ),
-          );
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20), // Radio más elevado
-          border: Border.all(
-            color:
-                Theme.of(context).dividerColor.withOpacity(0.4) ??
-                Colors.grey.withOpacity(0.2),
-            width: 0.5, // Hairline border
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // TEXTO DE LA NOTICIA
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titulo,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: Theme.of(context).primaryColor,
-                        height: 1.3,
-                        letterSpacing: -0.3, // Texto denso moderno
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        if (isDestacado)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 4.0),
-                            child: Icon(
-                              Icons.local_fire_department,
-                              color: Colors.orangeAccent,
-                              size: 16,
-                            ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            '$fuente • $tiempoLectura',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).primaryColor.withOpacity(0.6),
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              // IMAGEN DE LA NOTICIA
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color:
-                        Theme.of(context).dividerColor ??
-                        Colors.grey.withOpacity(0.2),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: imageUrl != null && imageUrl!.isNotEmpty
-                      ? Image.network(
-                          imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            Icons.newspaper,
-                            color: Theme.of(
-                              context,
-                            ).primaryColor.withOpacity(0.3),
-                          ),
-                        )
-                      : Icon(
-                          Icons.article_outlined,
-                          color: Theme.of(
-                            context,
-                          ).primaryColor.withOpacity(0.5),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- SECCIÓN 2: NOTICIAS (Lector RSS Moderno) ---
-class _SeccionNoticias extends StatefulWidget {
-  const _SeccionNoticias();
-
-  @override
-  State<_SeccionNoticias> createState() => _SeccionNoticiasState();
-}
-
-class _SeccionNoticiasState extends State<_SeccionNoticias> {
-  final NewsFilterService _newsFilterService = NewsFilterService();
-  final TextEditingController _searchController = TextEditingController();
-
-  final List<String> _categorias = [
-    'Para ti', // Predeterminado global
-    'Última hora',
-    'Tecnología',
-    'Deportes',
-    'Nacionales',
-  ];
-
-  final List<String> _canalesSuscritos = [
-    'Última hora',
-  ]; // Canales con push activado simulados
-
-  void _toggleSuscripcion(String canal) {
-    setState(() {
-      if (_canalesSuscritos.contains(canal)) {
-        _canalesSuscritos.remove(canal);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Alertas silenciadas para: #$canal')),
-        );
-      } else {
-        _canalesSuscritos.add(canal);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('🔔 Recibirás alertas push sobre: #$canal')),
-        );
-      }
-    });
-  }
-
-  void _mostrarCanalesSuscritos(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: StatefulBuilder(
-            builder: (context, setModalState) {
-              return Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mis Canales (Push Alerts)',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Recibirás notificaciones en tiempo real cuando periódicos publiquen historias de última hora sobre estos temas (estilo Twitter).',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Theme.of(context).primaryColor.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_canalesSuscritos.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20.0),
-                        child: Center(
-                          child: Text('No tienes canales suscritos.'),
-                        ),
-                      )
-                    else
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        children: _canalesSuscritos.map((canal) {
-                          return Chip(
-                            label: Text('#${canal.toUpperCase()}'),
-                            onDeleted: () {
-                              setState(() {
-                                _canalesSuscritos.remove(canal);
-                              });
-                              setModalState(() {});
-                            },
-                            deleteIcon: const Icon(Icons.cancel, size: 18),
-                            backgroundColor: Theme.of(
-                              context,
-                            ).primaryColor.withOpacity(0.1),
-                            labelStyle: TextStyle(
-                              color: Theme.of(context).primaryColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Instanciamos el Provider de Noticias para acceder a `newsProvider`
-    final newsProvider = Provider.of<NewsProvider>(context);
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Noticias',
-          style: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.bold,
-            letterSpacing: -1.2,
-          ),
-        ),
-        centerTitle: false,
-        toolbarHeight: 80,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_active_outlined),
-            tooltip: 'Mis Canales',
-            onPressed: () => _mostrarCanalesSuscritos(context),
-          ),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- BUSCADOR PROPIO DE NOTICIAS ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 8.0,
-            ),
-            child: TextField(
-              controller: _searchController,
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  setState(() {
-                    // Agregamos la búsqueda al panel de categorías rápidas si no existe
-                    if (!_categorias.contains(value.trim())) {
-                      _categorias.insert(1, value.trim());
-                    }
-                  });
-                  newsProvider.setCategoria(value.trim());
-                  _searchController.clear();
-                  // Ocultamos el teclado
-                  FocusScope.of(context).unfocus();
-                }
-              },
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Buscar temas, periódicos...',
-                hintStyle: TextStyle(
-                  color: theme.primaryColor.withOpacity(0.5),
-                ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: theme.primaryColor.withOpacity(0.6),
-                ),
-                filled: true,
-                fillColor: theme.primaryColor.withOpacity(0.06),
-                contentPadding: const EdgeInsets.symmetric(
-                  vertical: 10.0,
-                  horizontal: 16.0,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30), // Estilo píldora
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-
-          // --- CATEGORÍAS HORIZONTALES ---
-          SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: _categorias.length,
-              itemBuilder: (context, index) {
-                final cat = _categorias[index];
-                // Si está en 'Para ti', internamente la API usa 'Noticias Generales'
-                final categoryToSearch = cat == 'Para ti'
-                    ? 'Noticias Generales'
-                    : cat;
-                final isSelected =
-                    categoryToSearch == newsProvider.categoriaSeleccionada ||
-                    (cat == 'Para ti' &&
-                        newsProvider.categoriaSeleccionada ==
-                            'Noticias Generales');
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(cat),
-                    selected: isSelected,
-                    onSelected: (bool selected) {
-                      HapticFeedback.lightImpact();
-                      newsProvider.setCategoria(categoryToSearch);
-                    },
-                    selectedColor: theme.primaryColor,
-                    labelStyle: TextStyle(
-                      color: isSelected
-                          ? theme.scaffoldBackgroundColor
-                          : theme.primaryColor,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      side: BorderSide(
-                        color: isSelected
-                            ? Colors.transparent
-                            : theme.dividerColor ?? Colors.grey,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Divider(height: 20, color: theme.dividerColor.withOpacity(0.3)),
-
-          // --- BARRA DE SUSCRIPCIÓN A CANAL PUSH ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 4.0,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '# ${newsProvider.categoriaSeleccionada.toUpperCase()}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: theme.primaryColor.withOpacity(0.8),
-                    letterSpacing: 1.0,
-                    fontSize: 15,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    _toggleSuscripcion(newsProvider.categoriaSeleccionada);
-                  },
-                  icon: Icon(
-                    _canalesSuscritos.contains(
-                          newsProvider.categoriaSeleccionada,
-                        )
-                        ? Icons.notifications_active
-                        : Icons.notifications_none,
-                    size: 18,
-                  ),
-                  label: Text(
-                    _canalesSuscritos.contains(
-                          newsProvider.categoriaSeleccionada,
-                        )
-                        ? 'Suscrito'
-                        : 'Recibir Alertas',
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        _canalesSuscritos.contains(
-                          newsProvider.categoriaSeleccionada,
-                        )
-                        ? Colors.blueAccent
-                        : theme.primaryColor.withOpacity(0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // --- LISTA DE NOTICIAS ---
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                if (newsProvider.isLoading && newsProvider.feed == null) {
-                  return const _NewsLoadingSkeleton();
-                }
-
-                if (newsProvider.feed == null) {
-                  return Center(
-                    child: Text(
-                      'No se pudieron cargar las noticias.',
-                      style: TextStyle(
-                        color: Theme.of(context).primaryColor.withOpacity(0.6),
-                      ),
-                    ),
-                  );
-                }
-
-                final feed = newsProvider.feed!;
-                var articulos = feed.items.toList();
-
-                articulos.sort((a, b) {
-                  final textoA = '${a.title ?? ''} ${a.description ?? ''}';
-                  final textoB = '${b.title ?? ''} ${b.description ?? ''}';
-
-                  final scoreA = _newsFilterService.evaluateRelevance(textoA);
-                  final scoreB = _newsFilterService.evaluateRelevance(textoB);
-
-                  return scoreB.compareTo(
-                    scoreA,
-                  ); // Orden descendente (Mayor score primero)
-                });
-
-                if (articulos.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No hay noticias para esta categoría.\nIntenta con otra.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).primaryColor.withOpacity(0.6),
-                      ),
-                    ),
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () => newsProvider.cargarNoticias(),
-                  color: Theme.of(context).primaryColor,
-                  backgroundColor: Theme.of(context).cardColor,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(top: 0, bottom: 80),
-                    itemCount: articulos.length,
-                    itemBuilder: (context, index) {
-                      final articulo = articulos[index];
-                      final textoEvaluacion =
-                          '${articulo.title ?? ''} ${articulo.description ?? ''}';
-                      final score = _newsFilterService.evaluateRelevance(
-                        textoEvaluacion,
-                      );
-
-                      // Limpiar etiquetas HTML de la descripción
-                      String cleanDescription = (articulo.description ?? '')
-                          .replaceAll(RegExp(r'<[^>]*>'), '');
-
-                      // Extraer imagen si existe en la descripción (Google News lo hace así)
-                      String? imageToDisplay;
-                      final imgMatch = RegExp(
-                        r'src="([^"]+)"',
-                      ).firstMatch(articulo.description ?? '');
-                      if (imgMatch != null) {
-                        imageToDisplay = imgMatch.group(1);
-                      }
-
-                      return Column(
-                        children: [
-                          _NoticiaFeedItem(
-                            titulo: articulo.title ?? 'Sin título',
-                            fuente: feed.title ?? 'Noticias',
-                            tiempoLectura: 'Reciente',
-                            isDestacado: score > 0.8,
-                            contenido: cleanDescription,
-                            imageUrl: imageToDisplay,
-                            articleUrl: articulo
-                                .link, // Pasamos el link directo a la web real
-                          ),
-                          Divider(
-                            height: 1,
-                            color: Theme.of(
-                              context,
-                            ).dividerColor.withOpacity(0.5),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ), // Cierra Expanded
-        ], // Cierra children de Column
-      ), // Cierra Column
-    ); // Cierra Scaffold
-  }
-}
-
-// --- NUEVA TARJETA DE NOTICIAS TIPO TWITTER / THREADS ---
-class _NoticiaFeedItem extends StatelessWidget {
-  final String titulo;
-  final String fuente;
-  final String tiempoLectura;
-  final bool isDestacado;
-  final String? contenido;
-  final String? imageUrl;
-  final String? articleUrl;
-
-  const _NoticiaFeedItem({
-    required this.titulo,
-    required this.fuente,
-    required this.tiempoLectura,
-    this.isDestacado = false,
-    this.contenido,
-    this.imageUrl,
-    this.articleUrl,
-  });
-
-  Future<void> _abrirEnNavegador(BuildContext context) async {
-    if (articleUrl != null && articleUrl!.isNotEmpty) {
-      final uri = Uri.parse(articleUrl!);
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No se pudo abrir el enlace')),
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorPrimario = Theme.of(context).primaryColor;
-
-    return InkWell(
-      onTap: () {
-        if (articleUrl != null) {
-          _abrirEnNavegador(context);
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ReaderScreen(
-                titulo: titulo,
-                fuente: fuente,
-                contenido: contenido,
-              ),
-            ),
-          );
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // AVATAR FUENTE SIMULADO (Estilo red social)
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: colorPrimario.withOpacity(0.05),
-              child: Icon(
-                Icons.newspaper_rounded,
-                color: colorPrimario.withOpacity(0.6),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            // CONTENIDO PRINCIPAL
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // HEADER (Fuente y tiempo)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          fuente,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: colorPrimario,
-                            fontSize: 15,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (isDestacado)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(
-                            Icons
-                                .verified, // Check de verificación tipo red social
-                            color: Colors.blueAccent,
-                            size: 14,
-                          ),
-                        ),
-                      Text(
-                        '· $tiempoLectura',
-                        style: TextStyle(
-                          color: colorPrimario.withOpacity(0.5),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // TEXTO DE LA NOTICIA / TWEET
-                  Text(
-                    titulo,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: colorPrimario.withOpacity(0.9),
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // IMAGEN ADJUNTA (Opcional)
-                  if (imageUrl != null && imageUrl!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      height: 180,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color:
-                              Theme.of(context).dividerColor ??
-                              Colors.grey.withOpacity(0.2),
-                        ),
-                        image: DecorationImage(
-                          image: NetworkImage(imageUrl!),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  // BOTONES DE ACCIÓN (Estilo Twitter)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _AccionSocial(
-                        icono: Icons.chat_bubble_outline,
-                        texto: 'Leer',
-                      ),
-                      _AccionSocial(icono: Icons.repeat_rounded, texto: ''),
-                      _AccionSocial(
-                        icono: Icons.favorite_border,
-                        texto: 'Guardar',
-                      ),
-                      _AccionSocial(icono: Icons.share_outlined, texto: ''),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AccionSocial extends StatelessWidget {
-  final IconData icono;
-  final String texto;
-
-  const _AccionSocial({required this.icono, required this.texto});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).primaryColor.withOpacity(0.5);
-    return Row(
-      children: [
-        Icon(icono, size: 18, color: color),
-        if (texto.isNotEmpty) const SizedBox(width: 6),
-        if (texto.isNotEmpty)
-          Text(texto, style: TextStyle(fontSize: 13, color: color)),
-      ],
-    );
-  }
-}
-
-// --- SECCIÓN 3: BIBLIOTECA (Tus PDFs y Libros REALES) ---
+// --- SECCIÓN 2: BIBLIOTECA (Tus PDFs y Libros REALES) ---
 class _SeccionBiblioteca extends StatefulWidget {
   const _SeccionBiblioteca();
 
@@ -1918,7 +1872,6 @@ class _SeccionBiblioteca extends StatefulWidget {
 }
 
 class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
-  final StorageService _storageService = StorageService();
   List<Map<String, dynamic>> _documentos = [];
   bool _vistaCuadricula = false; // Controla si vemos lista o grid
 
@@ -2315,105 +2268,5 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         ),
       );
     }
-  }
-}
-
-// --- WIDGET PARA ANIMACIÓN DE CARGA (SKELETON) ---
-class _NewsLoadingSkeleton extends StatefulWidget {
-  const _NewsLoadingSkeleton();
-
-  @override
-  State<_NewsLoadingSkeleton> createState() => _NewsLoadingSkeletonState();
-}
-
-class _NewsLoadingSkeletonState extends State<_NewsLoadingSkeleton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true); // Efecto de latido continuo
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dividerColor = Theme.of(context).dividerColor ?? Colors.grey[300]!;
-
-    return FadeTransition(
-      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_controller),
-      child: ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-        itemCount: 5, // Mostramos 5 elementos fantasma
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: Container(
-              height: 110,
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04), // Súper transparente
-                    blurRadius: 24, // Muy difuminado
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 16,
-                          width: double.infinity,
-                          color: dividerColor.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 16,
-                          width: 150,
-                          color: dividerColor.withOpacity(0.5),
-                        ),
-                        const Spacer(),
-                        Container(
-                          height: 12,
-                          width: 100,
-                          color: dividerColor.withOpacity(0.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: dividerColor.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }

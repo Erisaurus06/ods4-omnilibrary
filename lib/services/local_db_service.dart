@@ -5,6 +5,8 @@ class LocalDbService {
   static const String _citasBox = 'citasBox';
   static const String _progresoBox = 'progresoBox';
   static const String _noticiasBox = 'noticiasBox';
+  static const String _notasBox = 'notasBox';
+  static const String _flashcardsBox = 'flashcardsBox';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -12,6 +14,8 @@ class LocalDbService {
     await Hive.openBox<List<dynamic>>(_citasBox);
     await Hive.openBox<dynamic>(_progresoBox);
     await Hive.openBox<String>(_noticiasBox);
+    await Hive.openBox<List<dynamic>>(_notasBox);
+    await Hive.openBox<List<dynamic>>(_flashcardsBox);
   }
 
   static Box<Map<dynamic, dynamic>> get _box =>
@@ -36,6 +40,45 @@ class LocalDbService {
   // Método para eliminar documentos de la biblioteca
   static Future<void> eliminarDocumento(int index) async {
     await _box.deleteAt(index);
+  }
+
+  // --- Notas (Post-its) ---
+  static Box<List<dynamic>> get _boxNotas => Hive.box<List<dynamic>>(_notasBox);
+
+  static List<Map<String, String>> obtenerNotas() {
+    // Obtenemos la lista dinámica y la transformamos de vuelta a Map<String, String>
+    final lista = _boxNotas.get('notas_lista', defaultValue: []) ?? [];
+    return lista.map((e) {
+      final map = e as Map;
+      return map.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    }).toList();
+  }
+
+  static Future<void> guardarNotas(List<Map<String, String>> notas) async {
+    await _boxNotas.put('notas_lista', notas);
+  }
+
+  // --- Flashcards ---
+  static Box<List<dynamic>> get _boxFlashcards =>
+      Hive.box<List<dynamic>>(_flashcardsBox);
+
+  static List<Map<String, String>> obtenerFlashcards() {
+    final lista =
+        _boxFlashcards.get('flashcards_lista', defaultValue: []) ?? [];
+    return lista.map((e) {
+      final map = e as Map;
+      return map.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    }).toList();
+  }
+
+  static Future<void> guardarFlashcards(
+    List<Map<String, String>> flashcards,
+  ) async {
+    await _boxFlashcards.put('flashcards_lista', flashcards);
   }
 
   // --- Citas ---

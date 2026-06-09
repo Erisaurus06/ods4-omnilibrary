@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/local_db_service.dart';
 import '../services/dictionary_service.dart';
 import '../services/ai_translation_service.dart';
+import '../services/wikipedia_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final String titulo;
@@ -68,6 +69,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- NUEVAS VARIABLES PARA DIBUJO/RESALTADO ---
   final List<_Trazo> _trazos = [];
   _Trazo? _trazoActual;
+
+  // --- NUEVAS VARIABLES: POMODORO Y DICCIONARIO ---
+  int _pomodoroSeconds = 0;
+  bool _isPomodoroActive = false;
+  bool _isPomodoroBreak = false;
+  Timer? _pomodoroTimer;
+
+  String? _selectedPdfText; // Guarda el texto seleccionado en el PDF
 
   // Función para cambiar el tema de lectura
   void _cambiarTema(String tema) {
@@ -215,10 +224,63 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  // --- LÓGICA DE POMODORO ---
+  void _togglePomodoro() {
+    if (_isPomodoroActive) {
+      _pomodoroTimer?.cancel();
+      setState(() {
+        _isPomodoroActive = false;
+        _pomodoroSeconds = 0;
+      });
+    } else {
+      setState(() {
+        _isPomodoroActive = true;
+        _isPomodoroBreak = false;
+        _pomodoroSeconds = 25 * 60; // 25 minutos
+      });
+      _startPomodoroTick();
+    }
+  }
+
+  void _startPomodoroTick() {
+    _pomodoroTimer?.cancel();
+    _pomodoroTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_pomodoroSeconds > 0) {
+          _pomodoroSeconds--;
+        } else {
+          _isPomodoroBreak = !_isPomodoroBreak;
+          _pomodoroSeconds = _isPomodoroBreak ? 5 * 60 : 25 * 60;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _isPomodoroBreak ? '¡Tiempo de Descanso! ☕' : '¡A Estudiar! 📖',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: _isPomodoroBreak
+                  ? Colors.green
+                  : Colors.redAccent,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
     ScreenBrightness().resetScreenBrightness();
     _readingTimer?.cancel();
+    _pomodoroTimer?.cancel();
     _flutterTts.stop(); // Detenemos la voz si el usuario cierra el lector
     _guardarProgresoEpub(); // Guardamos el ePub justo al salir
     _epubController?.dispose();
@@ -296,7 +358,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- DICCIONARIO OFFLINE (SIMULADO) ---
+  // --- DICCIONARIO MÁGICO (CON WIKIPEDIA) ---
   void _mostrarDefinicion(String palabra) async {
     if (palabra.isEmpty) return;
 
@@ -306,36 +368,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
         .toLowerCase()
         .trim();
 
-    // Llamamos al servicio real para obtener la definición
-    String definicion = 'Buscando definición...';
-    try {
-      definicion = await DictionaryService.definirPalabra(palabraLimpia);
-    } catch (e) {
-      definicion = 'Error al consultar el diccionario online.';
-    }
-
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _DiccionarioBottomSheet(
+        palabra: palabraLimpia,
         backgroundColor: _backgroundColor,
-        title: Text(
-          palabra,
-          style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          definicion,
-          style: TextStyle(color: _textColor.withOpacity(0.9), fontSize: 16),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Entendido',
-              style: TextStyle(color: Theme.of(context).primaryColor),
-            ),
-          ),
-        ],
+        textColor: _textColor,
       ),
     );
   }
@@ -915,6 +955,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: _textColor),
         actions: [
+          // Indicador Visual del Pomodoro
+          if (_isPomodoroActive)
+            Center(
+              child: Text(
+                '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
+                style: TextStyle(
+                  color: _isPomodoroBreak ? Colors.green : Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          IconButton(
+            icon: Icon(
+              _isPomodoroActive ? Icons.timer : Icons.timer_outlined,
+              color: _isPomodoroActive
+                  ? (_isPomodoroBreak ? Colors.green : Colors.redAccent)
+                  : _textColor,
+            ),
+            tooltip: 'Modo Enfoque (Pomodoro)',
+            onPressed: _togglePomodoro,
+          ),
           if (!widget.isPdf && !widget.isEpub)
             IconButton(
               icon: Icon(
@@ -953,6 +1015,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
           ),
         ],
       ),
+      // Botón flotante para el Diccionario cuando se selecciona texto en un PDF
+      floatingActionButton:
+          _selectedPdfText != null && _selectedPdfText!.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                _mostrarDefinicion(_selectedPdfText!);
+                setState(
+                  () => _selectedPdfText = null,
+                ); // Ocultar el botón después de buscar
+              },
+              icon: const Icon(Icons.language),
+              label: const Text('Definir en Wikipedia'),
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+            )
+          : null,
       // BARRA INFERIOR DE CONTROLES (Minimalista)
       // Ocultamos los controles si es un PDF, ya que manejan su propio flujo.
       bottomNavigationBar: widget.isPdf
@@ -1014,13 +1092,69 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
             ),
       // CUERPO DEL ARTÍCULO
-      body: _cargandoProgreso
-          ? Center(child: CircularProgressIndicator(color: _textColor))
-          : widget.isPdf && widget.documentPath != null
-          ? _buildPdfViewer()
-          : widget.isEpub && widget.documentPath != null
-          ? _buildEpubViewer()
-          : _buildTextArticle(),
+      body: Stack(
+        children: [
+          // Capa Base: El Lector
+          Positioned.fill(
+            child: _cargandoProgreso
+                ? Center(child: CircularProgressIndicator(color: _textColor))
+                : widget.isPdf && widget.documentPath != null
+                ? _buildPdfViewer()
+                : widget.isEpub && widget.documentPath != null
+                ? _buildEpubViewer()
+                : _buildTextArticle(),
+          ),
+          // Capa Superior: La Isla Flotante del Pomodoro
+          if (_isPomodoroActive)
+            Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _isPomodoroBreak
+                        ? Colors.green.shade600
+                        : Colors.redAccent.shade400,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isPomodoroBreak ? Icons.coffee : Icons.psychology,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                          letterSpacing: 1.5,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1223,6 +1357,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 details.newPageNumber,
               );
             },
+            onTextSelectionChanged: (PdfTextSelectionChangedDetails details) {
+              setState(() {
+                _selectedPdfText = details.selectedText;
+              });
+            },
           )
         : SfPdfViewer.file(
             File(widget.documentPath!),
@@ -1241,14 +1380,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 details.newPageNumber,
               );
             },
+            onTextSelectionChanged: (PdfTextSelectionChangedDetails details) {
+              setState(() {
+                _selectedPdfText = details.selectedText;
+              });
+            },
           );
 
     final bool modoAnotacionActivo =
         _drawMode || (_highlightColor != Colors.transparent && !_noteMode);
 
+    final textDirection = _modoVista == 'Manga (Der/Izq)'
+        ? TextDirection.rtl
+        : TextDirection.ltr;
+
     return Stack(
       children: [
-        viewer,
+        Directionality(textDirection: textDirection, child: viewer),
         // Capa de dibujo que intercepta los toques solo si las herramientas están activas
         if (modoAnotacionActivo)
           Positioned.fill(
@@ -1296,6 +1444,126 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     return EpubView(controller: _epubController!);
+  }
+}
+
+// --- BOTTOM SHEET DEL DICCIONARIO WIKIPEDIA ---
+class _DiccionarioBottomSheet extends StatefulWidget {
+  final String palabra;
+  final Color backgroundColor;
+  final Color textColor;
+
+  const _DiccionarioBottomSheet({
+    required this.palabra,
+    required this.backgroundColor,
+    required this.textColor,
+  });
+
+  @override
+  State<_DiccionarioBottomSheet> createState() =>
+      _DiccionarioBottomSheetState();
+}
+
+class _DiccionarioBottomSheetState extends State<_DiccionarioBottomSheet> {
+  bool _isLoading = true;
+  String _definicion = '';
+  String _tituloWiki = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _buscarWiki();
+  }
+
+  Future<void> _buscarWiki() async {
+    try {
+      final resultados = await WikipediaService.buscarArticulos(widget.palabra);
+      if (resultados.isNotEmpty) {
+        _definicion = resultados[0]['snippet'] ?? 'Sin descripción.';
+        _tituloWiki = resultados[0]['title'] ?? widget.palabra;
+      } else {
+        _definicion =
+            'No se encontró una definición en Wikipedia para "${widget.palabra}".';
+        _tituloWiki = widget.palabra;
+      }
+    } catch (e) {
+      _definicion = 'Error al consultar Wikipedia.';
+      _tituloWiki = widget.palabra;
+    }
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: widget.backgroundColor.withOpacity(0.95),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_isLoading)
+                Center(
+                  child: CircularProgressIndicator(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                )
+              else ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.language,
+                      color: widget.textColor.withOpacity(0.5),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _tituloWiki,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: widget.textColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _definicion,
+                  style: TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                    color: widget.textColor.withOpacity(0.9),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
