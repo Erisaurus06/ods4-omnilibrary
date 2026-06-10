@@ -313,12 +313,14 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Colors.transparent, // Para que se vea el fondo global
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: Text(
-          _modoVistaApuntes == 0 ? 'Muro de Notas 📌' : 'Mis Tareas 📅',
+          _modoVistaApuntes == 0 ? 'Mis Notas' : 'Recordatorios',
           style: const TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
@@ -365,26 +367,21 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
             if (_modoVistaApuntes == 0) {
               _mostrarCreadorDeApuntes(context);
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Modal para nueva tarea en desarrollo.'),
-                ),
-              );
               _mostrarCreadorDeTareas(context);
             }
           },
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-          child: const Icon(Icons.add),
+          backgroundColor: Colors.amber.shade600, // Estilo Apple Notes
+          foregroundColor: Colors.white,
+          child: const Icon(Icons.edit_square),
         ),
       ),
       body: _modoVistaApuntes == 0
-          ? _construirMuroDeNotas()
-          : _construirLibretaTareas(),
+          ? _construirMuroDeNotas(isDark)
+          : _construirLibretaTareas(isDark),
     );
   }
 
-  Widget _construirMuroDeNotas() {
+  Widget _construirMuroDeNotas(bool isDark) {
     final apuntesFiltrados = _searchQuery.isEmpty
         ? _misApuntes
         : _misApuntes
@@ -400,40 +397,39 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
               .toList();
 
     return Container(
-      // Fondo estilo pared/corcho/refrigerador
       decoration: BoxDecoration(
-        color: Colors.blueGrey[50], // Tono de refrigerador o pared
-        image: const DecorationImage(
-          image: NetworkImage(
-            'https://www.transparenttextures.com/patterns/white-wall.png',
-          ),
-          repeat: ImageRepeat.repeat,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isDark
+              ? [const Color(0xFF1C1C1E), const Color(0xFF000000)]
+              : [const Color(0xFFF2F2F7), const Color(0xFFE5E5EA)],
         ),
       ),
       child: Column(
         children: [
-          // Barra de Búsqueda Mágica
+          // Barra de Búsqueda Estilo iOS
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                    color: isDark ? Colors.grey.shade800.withOpacity(0.6) : Colors.grey.shade300.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: TextField(
                     onChanged: (val) {
                       setState(() => _searchQuery = val);
                     },
                     decoration: const InputDecoration(
-                      icon: Icon(Icons.search, color: Colors.grey),
-                      hintText: 'Buscar en mis apuntes...',
+                      icon: Icon(Icons.search, color: Colors.grey, size: 20),
+                      hintText: 'Buscar',
                       border: InputBorder.none,
+                      isDense: true,
                     ),
                   ),
                 ),
@@ -462,7 +458,7 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Toca el + para iniciar tu primer apunte.',
+                          'Toca el botón de redactar para crear una nota o tarea.',
                           style: TextStyle(
                             color: Colors.blueGrey.withOpacity(0.4),
                           ),
@@ -470,299 +466,130 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       ],
                     ),
                   )
-                : GridView.builder(
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 20,
-                          mainAxisSpacing: 20,
-                        ),
-                    itemCount: apuntesFiltrados.length,
-                    itemBuilder: (context, index) {
-                      final apunte = apuntesFiltrados[index];
-                      // Para asegurar que el índice correcto se edita/elimina
-                      final realIndex = _misApuntes.indexOf(apunte);
+                : Expanded(
+                    child: GridView.builder(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 20,
+                        mainAxisSpacing: 20,
+                      ),
+                      itemCount: apuntesFiltrados.length,
+                      itemBuilder: (context, index) {
+                        final apunte = apuntesFiltrados[index];
+                        final realIndex = _misApuntes.indexOf(apunte);
+                        final esTarea = apunte['tipo'] == 'tarea';
+                        final isCompletada = apunte['completada'] == 'true';
 
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          GestureDetector(
-                            onTap: () => _mostrarCreadorDeApuntes(
-                              context,
-                              apunteExistente: apunte,
-                              index: realIndex,
-                            ),
-                            onLongPress: () {
-                              HapticFeedback.heavyImpact();
-                              _confirmarEliminar(realIndex);
-                            },
-                            child: Hero(
-                              tag: 'apunte_$realIndex',
-                              child: Material(
-                                color: Colors.transparent,
-                                child: Container(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    24,
-                                    16,
-                                    16,
+                        return GestureDetector(
+                          onTap: () {
+                            if (esTarea) {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _misApuntes[realIndex]['completada'] = isCompletada ? 'false' : 'true';
+                              });
+                              LocalDbService.guardarNotas(_misApuntes);
+                            } else {
+                              _mostrarCreadorHibrido(
+                                context,
+                                apunteExistente: apunte,
+                                index: realIndex,
+                              );
+                            }
+                          },
+                          onLongPress: () {
+                            _confirmarEliminar(realIndex);
+                          },
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 200),
+                            opacity: isCompletada ? 0.5 : 1.0,
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Color(int.parse(apunte['color']!)),
-                                    borderRadius: BorderRadius.circular(4),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.15),
-                                        blurRadius: 8,
-                                        offset: const Offset(2, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                ],
+                                border: Border.all(
+                                  color: Theme.of(context).dividerColor.withOpacity(0.5),
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
                                     children: [
-                                      Text(
-                                        apunte['titulo']!,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: Colors.black87,
+                                      if (esTarea) ...[
+                                        Icon(
+                                          isCompletada ? Icons.check_circle : Icons.radio_button_unchecked,
+                                          size: 18,
+                                          color: isCompletada ? Colors.green : Theme.of(context).primaryColor,
                                         ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (apunte.containsKey('fecha')) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatearFecha(apunte['fecha']),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.black.withOpacity(
-                                              0.4,
-                                            ),
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
+                                        const SizedBox(width: 8),
                                       ],
-                                      const SizedBox(height: 8),
                                       Expanded(
                                         child: Text(
-                                          apunte['contenido']!,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            height: 1.4,
-                                            color: Colors.black87,
+                                          apunte['titulo']?.isNotEmpty == true ? apunte['titulo']! : 'Nueva nota',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: Theme.of(context).primaryColor,
+                                            decoration: isCompletada ? TextDecoration.lineThrough : null,
                                           ),
-                                          overflow: TextOverflow.fade,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Chincheta / Imán superior
-                          Positioned(
-                            top: -8,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: Colors.red[400],
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    apunte.containsKey('fecha') ? _formatearFecha(apunte['fecha']) : '',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context).primaryColor.withOpacity(0.5),
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (!esTarea)
+                                    Expanded(
+                                      child: Text(
+                                        apunte['contenido']?.isNotEmpty == true ? apunte['contenido']! : 'No hay texto adicional',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          height: 1.4,
+                                          color: Theme.of(context).primaryColor.withOpacity(0.8),
+                                        ),
+                                        maxLines: 4,
+                                        overflow: TextOverflow.fade,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
-                        ],
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _construirLibretaTareas() {
-    return Container(
-      // Fondo simulando líneas de una mini libreta
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.yellow[50],
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ListView.separated(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.only(top: 16, bottom: 120),
-        itemCount: _misTareas.length,
-        separatorBuilder: (context, index) =>
-            Divider(color: Colors.blue[200], height: 1),
-        itemBuilder: (context, index) {
-          final tarea = _misTareas[index];
-          final isCompletada = tarea['completada'] as bool;
-          return ListTile(
-            leading: InkWell(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                setState(() {
-                  _misTareas[index]['completada'] = !isCompletada;
-                });
-              },
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isCompletada ? Colors.green : Colors.grey,
-                    width: 2,
-          return Dismissible(
-            key: Key('tarea_${tarea['titulo']}_$index'),
-            direction: DismissDirection.endToStart,
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
-              color: Colors.red[400],
-              child: const Icon(Icons.delete_outline, color: Colors.white),
-            ),
-            onDismissed: (_) {
-              setState(() => _misTareas.removeAt(index));
-              LocalDbService.guardarTareas(_misTareas);
-            },
-            child: ListTile(
-              leading: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  setState(() {
-                    _misTareas[index]['completada'] = !isCompletada;
-                  });
-                  LocalDbService.guardarTareas(_misTareas);
-                },
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isCompletada ? Colors.green : Colors.grey,
-                      width: 2,
-                    ),
-                    color: isCompletada ? Colors.green : Colors.transparent,
-                  ),
-                  color: isCompletada ? Colors.green : Colors.transparent,
-                  child: isCompletada
-                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
-                ),
-                child: isCompletada
-                    ? const Icon(Icons.check, size: 16, color: Colors.white)
-                    : null,
-              ),
-            ),
-            title: Text(
-              tarea['titulo'],
-              style: TextStyle(
-                fontSize: 16,
-                decoration: isCompletada ? TextDecoration.lineThrough : null,
-                color: isCompletada ? Colors.grey : Colors.black87,
-              title: Text(
-                tarea['titulo'],
-                style: TextStyle(
-                  fontSize: 16,
-                  decoration: isCompletada ? TextDecoration.lineThrough : null,
-                  color: isCompletada ? Colors.grey : Colors.black87,
-                ),
-              ),
-            ),
-            subtitle: Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 14,
-                  color: isCompletada ? Colors.grey : Colors.redAccent,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  tarea['fecha'],
-                  style: TextStyle(
-                    fontSize: 12,
-              subtitle: Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 14,
-                    color: isCompletada ? Colors.grey : Colors.redAccent,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    tarea['fecha'],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isCompletada ? Colors.grey : Colors.redAccent,
-                    ),
-                  ),
-                ],
-              ),
-              trailing: IconButton(
-                icon: const Icon(
-                  Icons.notifications_active_outlined,
-                  color: Colors.blueAccent,
-                ),
-              ],
-            ),
-            trailing: IconButton(
-              icon: const Icon(
-                Icons.notifications_active_outlined,
-                color: Colors.blueAccent,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Recordatorio programado con el calendario.'),
-                    ),
-                  );
-                },
-              ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Recordatorio programado con el calendario.'),
-                  ),
-                );
-              },
-            ),
-          );
-        },
       ),
     );
   }
 
   void _confirmarEliminar(int index) {
+    HapticFeedback.mediumImpact();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -820,6 +647,7 @@ class _SeccionFlashcards extends StatefulWidget {
 class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
   final _tituloController = TextEditingController();
   final _contenidoController = TextEditingController();
+  final _mazoController = TextEditingController(); // Controlador para Categorías
   List<Map<String, String>> _misFlashcards = [];
 
   int _modoFlashcards =
@@ -850,6 +678,7 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
         flashcardExistente?['color'] ?? '0xFF90CAF9'; // Azul pastel por defecto
     _tituloController.text = flashcardExistente?['titulo'] ?? '';
     _contenidoController.text = flashcardExistente?['contenido'] ?? '';
+    _mazoController.text = flashcardExistente?['mazo'] ?? 'General';
 
     showModalBottomSheet(
       context: context,
@@ -923,6 +752,20 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                           textCapitalization: TextCapitalization.sentences,
                         ),
                         const SizedBox(height: 16),
+                        TextField(
+                          controller: _mazoController,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          decoration: InputDecoration(
+                            icon: Icon(Icons.folder, color: Theme.of(context).primaryColor.withOpacity(0.5)),
+                            hintText: 'Mazo o Categoría (Ej. Biología)',
+                            border: InputBorder.none,
+                          ),
+                          textCapitalization: TextCapitalization.words,
+                        ),
+                        const Divider(),
                         Container(
                           constraints: BoxConstraints(
                             maxHeight: MediaQuery.of(context).size.height * 0.4,
@@ -957,12 +800,14 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                                       ...flashcardExistente, // Conserva datos de SRS previos
                                       'titulo': titulo,
                                       'contenido': contenido,
+                                      'mazo': _mazoController.text.trim().isEmpty ? 'General' : _mazoController.text.trim(),
                                       'color': selectedColor,
                                     };
                                   } else {
                                     _misFlashcards.insert(0, {
                                       'titulo': titulo,
                                       'contenido': contenido,
+                                      'mazo': _mazoController.text.trim().isEmpty ? 'General' : _mazoController.text.trim(),
                                       'color': selectedColor,
                                       'reps': '0',
                                       'ease': '2.5',
@@ -976,6 +821,7 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                                 );
                                 _tituloController.clear();
                                 _contenidoController.clear();
+                                _mazoController.clear();
                                 Navigator.pop(context);
                               }
                             },
@@ -1125,27 +971,78 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
   }
 
   Widget _construirGridTarjetas() {
-    return GridView.builder(
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _misFlashcards.length,
+    final mazos = _misFlashcards.map((f) => f['mazo'] ?? 'General').toSet().toList();
+
+    if (_misFlashcards.isEmpty) {
+      return Center(
+        child: Text('Tus flashcards aparecerán aquí organizadas por mazos.', style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.5))),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(0, 10, 0, 120),
+      itemCount: mazos.length,
       itemBuilder: (context, index) {
-        final flashcard = _misFlashcards[index];
-        return _FlashcardItem(
-          nota: flashcard,
-          onLongPress: () => _confirmarEliminar(index),
-          onEdit: () => _mostrarCreadorDeFlashcards(
-            context,
-            flashcardExistente: flashcard,
-            index: index,
-          ),
+        final mazo = mazos[index];
+        final tarjetasMazo = _misFlashcards.where((f) => (f['mazo'] ?? 'General') == mazo).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.folder_open, color: Theme.of(context).primaryColor.withOpacity(0.7)),
+                  const SizedBox(width: 8),
+                  Text(
+                    mazo,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${tarjetasMazo.length}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Theme.of(context).primaryColor.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: tarjetasMazo.length,
+                itemBuilder: (context, cardIndex) {
+                  final flashcard = tarjetasMazo[cardIndex];
+                  final realIndex = _misFlashcards.indexOf(flashcard);
+                  return Container(
+                    width: 160,
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    child: _FlashcardItem(
+                      nota: flashcard,
+                      onLongPress: () => _confirmarEliminar(realIndex),
+                      onEdit: () => _mostrarCreadorDeFlashcards(
+                        context,
+                        flashcardExistente: flashcard,
+                        index: realIndex,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
         );
       },
     );
@@ -2093,6 +1990,18 @@ class _SeccionBiblioteca extends StatefulWidget {
 class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
   List<Map<String, dynamic>> _documentos = [];
   bool _vistaCuadricula = false; // Controla si vemos lista o grid
+  String _searchQuery = ''; // Búsqueda local
+
+  // Genera un gradiente único y elegante basado en el título del libro
+  List<Color> _generarColoresPortada(String titulo) {
+    final int hash = titulo.hashCode;
+    final hue1 = (hash % 360).toDouble();
+    final hue2 = ((hash * 13) % 360).toDouble();
+    return [
+      HSLColor.fromAHSL(1.0, hue1, 0.7, 0.4).toColor(),
+      HSLColor.fromAHSL(1.0, hue2, 0.8, 0.2).toColor(),
+    ];
+  }
 
   @override
   void initState() {
@@ -2254,6 +2163,12 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
 
   @override
   Widget build(BuildContext context) {
+    final docsFiltrados = _searchQuery.isEmpty
+        ? _documentos
+        : _documentos
+            .where((d) => (d['titulo'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase()))
+            .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -2358,53 +2273,87 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               curve: Curves.easeOutBack,
             ),
       ),
-      // Si no hay documentos, mostramos una pantalla vacía elegante
-      body: _documentos.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.auto_stories_outlined,
-                    size: 80,
-                    color: Theme.of(context).primaryColor.withOpacity(0.2),
+      body: Column(
+        children: [
+          // Barra de Búsqueda Estilo iOS Glassmorphic
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark 
+                        ? Colors.grey.shade800.withOpacity(0.6) 
+                        : Colors.grey.shade300.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Tu biblioteca está vacía',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).primaryColor.withOpacity(0.6),
+                  child: TextField(
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                    decoration: const InputDecoration(
+                      icon: Icon(Icons.search, color: Colors.grey, size: 20),
+                      hintText: 'Buscar en mi biblioteca...',
+                      border: InputBorder.none,
+                      isDense: true,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Toca el botón + para añadir PDFs o ePubs.',
-                    style: TextStyle(
-                      color: Theme.of(context).primaryColor.withOpacity(0.4),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            )
-          // Si hay documentos, mostramos Cuadrícula o Lista según prefiera el usuario
-          : _vistaCuadricula
-          ? _construirVistaCuadricula()
-          : _construirVistaLista(),
+            ),
+          ),
+          Expanded(
+            child: _documentos.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.auto_stories_outlined,
+                          size: 80,
+                          color: Theme.of(context).primaryColor.withOpacity(0.2),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Tu biblioteca está vacía',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).primaryColor.withOpacity(0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Toca el botón + para añadir PDFs o ePubs.',
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor.withOpacity(0.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().fade().scale()
+                : _vistaCuadricula
+                    ? _construirVistaCuadricula(docsFiltrados)
+                    : _construirVistaLista(docsFiltrados),
+          ),
+        ],
+      ),
     );
   }
 
   // --- VISTA 1: LISTA (Con función de deslizar para borrar) ---
-  Widget _construirVistaLista() {
+  Widget _construirVistaLista(List<Map<String, dynamic>> documentos) {
     return ListView.builder(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-      itemCount: _documentos.length,
+      itemCount: documentos.length,
       itemBuilder: (context, index) {
-        final doc = _documentos[index];
+        final doc = documentos[index];
+        // Encontrar el índice real en _documentos para borrar/editar correctamente
+        final realIndex = _documentos.indexOf(doc);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
@@ -2457,70 +2406,103 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
                 color: Theme.of(context).primaryColor.withOpacity(0.3),
               ),
               onTap: () => _abrirLector(doc),
-              onLongPress: () => _mostrarMenuDocumento(index),
+              onLongPress: () => _mostrarMenuDocumento(realIndex),
             ),
           ),
-        );
+        ).animate().fade(duration: 300.ms).slideX(begin: 0.05, end: 0, delay: (index % 15 * 30).ms);
       },
     );
   }
 
   // --- VISTA 2: CUADRÍCULA (Estilo estantería) ---
-  Widget _construirVistaCuadricula() {
+  Widget _construirVistaCuadricula(List<Map<String, dynamic>> documentos) {
     return GridView.builder(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 120), // Padding extra abajo
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, // Dos columnas
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.75, // Proporción estilo libro
+        childAspectRatio: 0.70, // Proporción estilo libro clásico
       ),
-      itemCount: _documentos.length,
+      itemCount: documentos.length,
       itemBuilder: (context, index) {
-        final doc = _documentos[index];
+        final doc = documentos[index];
+        final realIndex = _documentos.indexOf(doc);
+        
         return GestureDetector(
           onTap: () => _abrirLector(doc),
-          onLongPress: () => _mostrarMenuDocumento(index),
+          onLongPress: () => _mostrarMenuDocumento(realIndex),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).dividerColor ?? Colors.grey,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: _generarColoresPortada(doc['titulo']),
               ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  doc['esPdf'] == true
-                      ? Icons.picture_as_pdf_rounded
-                      : Icons.menu_book_rounded,
-                  size: 50,
-                  color: Theme.of(context).primaryColor.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
                 ),
-                const SizedBox(height: 16),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Marca de agua de fondo
+                Positioned(
+                  right: -15,
+                  bottom: -15,
+                  child: Icon(
+                    doc['esPdf'] == true ? Icons.picture_as_pdf : Icons.menu_book,
+                    size: 90,
+                    color: Colors.white.withOpacity(0.15),
+                  ),
+                ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Text(
-                    doc['titulo'],
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Theme.of(context).primaryColor,
-                    ),
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          doc['esPdf'] == true ? 'PDF' : 'EPUB',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        doc['titulo'],
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.white,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        );
+        ).animate().fade(duration: 400.ms).scale(begin: const Offset(0.9, 0.9), delay: (index % 10 * 40).ms);
       },
     );
   }
