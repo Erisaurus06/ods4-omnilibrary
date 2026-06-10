@@ -532,10 +532,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       Text(
                         'Ajustes de Lectura',
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
                           color: primaryColor,
-                          letterSpacing: -0.5,
+                          letterSpacing: -0.8,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -1158,15 +1158,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: _isPomodoroBreak
-                          ? Colors.green.shade600
-                          : Colors.redAccent.shade400,
-                      borderRadius: BorderRadius.circular(30),
+                      color: Colors.black.withOpacity(
+                        0.85,
+                      ), // Isla Dinámica estilo iOS
+                      borderRadius: BorderRadius.circular(40),
+                      border: Border.all(
+                        color: _isPomodoroBreak
+                            ? Colors.green
+                            : Colors.redAccent,
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 15,
-                          offset: const Offset(0, 6),
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -1175,15 +1181,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       children: [
                         Icon(
                           _isPomodoroBreak ? Icons.coffee : Icons.psychology,
-                          color: Colors.white,
+                          color: _isPomodoroBreak
+                              ? Colors.green
+                              : Colors.redAccent,
                           size: 22,
                         ),
                         const SizedBox(width: 10),
                         Text(
                           '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
+                          style: TextStyle(
+                            color: _isPomodoroBreak
+                                ? Colors.green
+                                : Colors.redAccent,
+                            fontWeight: FontWeight.bold,
                             fontSize: 18,
                             letterSpacing: 1.5,
                             fontFamily: 'monospace',
@@ -1219,8 +1229,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
           Text(
             widget.titulo,
             style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+              fontSize: 30, // H1 estilo Notion
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
               height: 1.2,
               color: _textColor,
             ),
@@ -1232,8 +1243,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
             style: TextStyle(
               fontFamily: _fontFamily == 'System' ? null : _fontFamily,
               fontSize: _fontSize,
-              height: 1.6, // Interlineado amplio para lectura cómoda
-              color: _textColor.withOpacity(0.9),
+              height: 1.7, // Interlineado premium (Obsidian style)
+              letterSpacing: 0.2, // Espaciado súper nítido
+              color: _textColor.withOpacity(0.85),
             ),
             contextMenuBuilder:
                 (BuildContext context, EditableTextState editableTextState) {

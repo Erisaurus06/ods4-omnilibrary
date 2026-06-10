@@ -370,7 +370,9 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
               _mostrarCreadorDeTareas(context);
             }
           },
-          backgroundColor: Colors.amber.shade600, // Estilo Apple Notes
+          shape: const CircleBorder(),
+          elevation: 4,
+          backgroundColor: Colors.amber.shade500, // Estilo Apple Notes
           foregroundColor: Colors.white,
           child: const Icon(Icons.edit_square),
         ),
@@ -397,15 +399,7 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
               .toList();
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [const Color(0xFF1C1C1E), const Color(0xFF000000)]
-              : [const Color(0xFFF2F2F7), const Color(0xFFE5E5EA)],
-        ),
-      ),
+      color: Theme.of(context).scaffoldBackgroundColor, // Fondo sólido y limpio estilo Notion
       child: Column(
         children: [
           // Barra de Búsqueda Estilo iOS
@@ -510,17 +504,17 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
+                                    color: Colors.black.withOpacity(isDark ? 0.0 : 0.03),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                                 border: Border.all(
-                                  color: Theme.of(context).dividerColor.withOpacity(0.5),
-                                  width: 0.5,
+                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                                  width: 1,
                                 ),
                               ),
                               child: Column(
@@ -957,6 +951,8 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
           onPressed: () => _modoFlashcards == 0
               ? _mostrarCreadorDeFlashcards(context)
               : null,
+          shape: const CircleBorder(),
+          elevation: 4,
           backgroundColor: Theme.of(context).primaryColor,
           foregroundColor: Theme.of(context).scaffoldBackgroundColor,
           child: const Icon(Icons.add),
@@ -1337,14 +1333,15 @@ class _FlashcardItemState extends State<_FlashcardItem>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Color(int.parse(widget.nota['color']!)),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
                 ],
+                border: Border.all(color: Colors.black.withOpacity(0.05), width: 1),
               ),
               child: isBackShowing
                   ? Transform(
@@ -1577,23 +1574,17 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [Colors.grey.shade900, Colors.black]
-                    : [Colors.blue.shade50, Colors.white],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? Colors.grey.shade800 : Colors.blue.shade100,
+                color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 )
               ]
             ),
@@ -1765,15 +1756,20 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
   }
 
   Widget _buildSettingsCard(BuildContext context, List<Widget> children) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ]
       ),
@@ -2202,6 +2198,8 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         ), // ESTO SOLUCIONA LA ORIENTACIÓN Y OVERLAP CON EL MENÚ
         child:
             FloatingActionButton(
+              shape: const CircleBorder(),
+              elevation: 4,
               backgroundColor: Theme.of(context).primaryColor,
               foregroundColor: Theme.of(context).scaffoldBackgroundColor,
               child: const Icon(Icons.add),
@@ -2362,7 +2360,17 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Theme.of(context).dividerColor ?? Colors.grey,
+                color: Theme.of(context).brightness == Brightness.dark 
+                    ? Colors.white.withOpacity(0.1) 
+                    : Colors.black.withOpacity(0.05),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
               ),
             ),
             child: ListTile(
@@ -2452,6 +2460,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               ],
             ),
             child: Stack(
+              clipBehavior: Clip.antiAlias, // Estilo Apple Books para portadas
               children: [
                 // Marca de agua de fondo
                 Positioned(

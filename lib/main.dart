@@ -10,6 +10,8 @@ import 'services/supabase_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +23,10 @@ Future<void> main() async {
   await LocalDbService.init();
   await SupabaseService.inicializar(); // Esta línea se encarga de todo lo de Supabase
 
+  // 3. Verificamos si es la primera vez que se abre la app
+  final prefs = await SharedPreferences.getInstance();
+  final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+
   runApp(
     MultiProvider(
       providers: [
@@ -29,13 +35,14 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => NewsProvider()),
         ChangeNotifierProvider(create: (_) => ExploreProvider()),
       ],
-      child: const OmniLibraryApp(),
+      child: OmniLibraryApp(hasSeenOnboarding: hasSeenOnboarding),
     ),
   );
 }
 
 class OmniLibraryApp extends StatelessWidget {
-  const OmniLibraryApp({super.key});
+  final bool hasSeenOnboarding;
+  const OmniLibraryApp({super.key, required this.hasSeenOnboarding});
 
   @override
   Widget build(BuildContext context) {
@@ -92,14 +99,15 @@ class OmniLibraryApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthGate(),
+      home: AuthGate(hasSeenOnboarding: hasSeenOnboarding),
     );
   }
 }
 
 /// Wrapper que verifica el estado de la sesión de Supabase en tiempo real
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  final bool hasSeenOnboarding;
+  const AuthGate({super.key, required this.hasSeenOnboarding});
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +123,9 @@ class AuthGate extends StatelessWidget {
         if (session != null) {
           return const HomeScreen(); // Usuario logueado
         }
-        return const AuthScreen(); // Pedir inicio de sesión
+        return hasSeenOnboarding
+            ? const AuthScreen()
+            : const OnboardingScreen();
       },
     );
   }
