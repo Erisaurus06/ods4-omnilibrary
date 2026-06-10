@@ -50,6 +50,81 @@ class AiTranslationService {
     return 'Actúa como un asistente de estudio experto. Resume el siguiente texto extraído del documento "$documentTitle" en un párrafo conciso y fácil de entender, destacando los puntos principales.\n\n--- TEXTO ---\n$originalText\n--- FIN TEXTO ---';
   }
 
+  /// Genera un prompt para que la IA cree flashcards a partir de un texto.
+  String generateFlashcardsPrompt({required String text}) {
+    return '''
+Actúa como un asistente de estudio experto. Tu tarea es analizar el siguiente texto y generar un conjunto de flashcards (pregunta y respuesta) para ayudar a un estudiante a memorizar los conceptos clave.
+
+REGLAS ESTRICTAS:
+1.  Extrae únicamente los conceptos más importantes y fundamentales. No crees flashcards sobre datos triviales.
+2.  Las preguntas deben ser claras y directas.
+3.  Las respuestas deben ser concisas y fáciles de entender.
+4.  Genera un MÁXIMO de 10 flashcards.
+5.  Debes devolver la respuesta EXCLUSIVAMENTE en formato JSON, como un array de objetos. No incluyas texto introductorio, explicaciones ni la palabra "json".
+6.  Cada objeto en el array debe tener tres claves: "titulo" (para la pregunta/concepto), "contenido" (para la respuesta/definición) y "color".
+7.  Asigna un color pastel aleatorio a cada flashcard. Elige entre estos colores: '0xFFFFF59D' (amarillo), '0xFFB39DDB' (morado), '0xFFA5D6A7' (verde), '0xFF90CAF9' (azul), '0xFFFFAB91' (naranja).
+
+EJEMPLO DE SALIDA JSON:
+[
+  {
+    "titulo": "¿Qué es la fotosíntesis?",
+    "contenido": "Es el proceso en el cual la energía de la luz se convierte en energía química en forma de azúcares, usando agua y dióxido de carbono.",
+    "color": "0xFFFFF59D"
+  },
+  {
+    "titulo": "Productos de la fotosíntesis",
+    "contenido": "Glucosa (azúcares) que proporciona energía y carbono, y oxígeno como subproducto.",
+    "color": "0xFFA5D6A7"
+  }
+]
+
+--- TEXTO A ANALIZAR ---
+$text
+--- FIN DEL TEXTO ---
+''';
+  }
+
+  /// Llama a la API de Gemini para generar flashcards a partir de un texto.
+  Future<List<Map<String, String>>> getFlashcardsFromText(String text) async {
+    final prompt = generateFlashcardsPrompt(text: text);
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_geminiApiKey',
+    );
+
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              "contents": [
+                {
+                  "parts": [
+                    {"text": prompt},
+                  ],
+                },
+              ],
+              "generationConfig": {"responseMimeType": "application/json"},
+            }),
+          )
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> flashcardList = jsonDecode(
+          data['candidates'][0]['content']['parts'][0]['text'],
+        );
+        return flashcardList
+            .map((item) => Map<String, String>.from(item))
+            .toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
   /// Método simulado de conexión con IA para obtener el resumen.
   /// Aquí debes conectar tu endpoint real (OpenAI, Gemini, Claude, etc).
   Future<String> getResumen(String title, String text) async {

@@ -6,6 +6,7 @@ import 'package:epub_view/epub_view.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 import '../services/local_db_service.dart';
 import '../services/dictionary_service.dart';
 import '../services/ai_translation_service.dart';
@@ -46,6 +47,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String _modoVista = 'Vertical (Arriba/Abajo)'; // Opciones actualizadas
   final bool _modoTraduccion = false;
   String _fontFamily = 'System'; // Tipografía activa
+  bool _showUI = true; // Control del Modo Inmersivo
 
   // Nuevas variables para herramientas y temporizador
   Timer? _readingTimer;
@@ -283,6 +285,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _pomodoroTimer?.cancel();
     _flutterTts.stop(); // Detenemos la voz si el usuario cierra el lector
     _guardarProgresoEpub(); // Guardamos el ePub justo al salir
+    if (widget.isPdf && widget.documentPath != null) {
+      LocalDbService.guardarProgreso(
+        'pdf_page_${widget.documentPath}',
+        _pdfViewerController.pageNumber,
+      );
+    }
     _epubController?.dispose();
     _pdfViewerController.dispose();
     super.dispose();
@@ -949,71 +957,86 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      extendBody: true,
       backgroundColor: _backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: IconThemeData(color: _textColor),
-        actions: [
-          // Indicador Visual del Pomodoro
-          if (_isPomodoroActive)
-            Center(
-              child: Text(
-                '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
-                style: TextStyle(
-                  color: _isPomodoroBreak ? Colors.green : Colors.redAccent,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: IgnorePointer(
+          ignoring: !_showUI,
+          child: AnimatedOpacity(
+            opacity: _showUI ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: AppBar(
+              backgroundColor: _backgroundColor.withOpacity(0.9),
+              elevation: 0,
+              iconTheme: IconThemeData(color: _textColor),
+              actions: [
+                // Indicador Visual del Pomodoro
+                if (_isPomodoroActive)
+                  Center(
+                    child: Text(
+                      '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        color: _isPomodoroBreak
+                            ? Colors.green
+                            : Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  icon: Icon(
+                    _isPomodoroActive ? Icons.timer : Icons.timer_outlined,
+                    color: _isPomodoroActive
+                        ? (_isPomodoroBreak ? Colors.green : Colors.redAccent)
+                        : _textColor,
+                  ),
+                  tooltip: 'Modo Enfoque (Pomodoro)',
+                  onPressed: _togglePomodoro,
                 ),
-              ),
-            ),
-          IconButton(
-            icon: Icon(
-              _isPomodoroActive ? Icons.timer : Icons.timer_outlined,
-              color: _isPomodoroActive
-                  ? (_isPomodoroBreak ? Colors.green : Colors.redAccent)
-                  : _textColor,
-            ),
-            tooltip: 'Modo Enfoque (Pomodoro)',
-            onPressed: _togglePomodoro,
-          ),
-          if (!widget.isPdf && !widget.isEpub)
-            IconButton(
-              icon: Icon(
-                _isSpeaking
-                    ? Icons.stop_circle_outlined
-                    : Icons.volume_up_outlined,
-              ),
-              onPressed: _toggleTts,
-            ),
-          // Botón de guardado, solo visible para PDFs locales
-          if (widget.isPdf &&
-              widget.documentPath != null &&
-              !widget.documentPath!.startsWith('http'))
-            IconButton(
-              icon: const Icon(Icons.save_outlined),
-              tooltip: 'Guardar anotaciones',
-              onPressed: _guardarAnotacionesPdf,
-            ),
-          IconButton(
-            icon: const Icon(Icons.bookmark_border),
-            onPressed: _mostrarCitasFavoritas, // Abre el menú de favoritos
-          ),
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {
-              final textoCompartir = widget.documentPath != null
-                  ? 'Estoy leyendo "${widget.titulo}" en OmniLibrary. ¡Échale un vistazo!'
-                  : 'Lectura recomendada: "${widget.titulo}".\n\nOmniLibrary App';
+                if (!widget.isPdf && !widget.isEpub)
+                  IconButton(
+                    icon: Icon(
+                      _isSpeaking
+                          ? Icons.stop_circle_outlined
+                          : Icons.volume_up_outlined,
+                    ),
+                    onPressed: _toggleTts,
+                  ),
+                // Botón de guardado, solo visible para PDFs locales
+                if (widget.isPdf &&
+                    widget.documentPath != null &&
+                    !widget.documentPath!.startsWith('http'))
+                  IconButton(
+                    icon: const Icon(Icons.save_outlined),
+                    tooltip: 'Guardar anotaciones',
+                    onPressed: _guardarAnotacionesPdf,
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_border),
+                  onPressed:
+                      _mostrarCitasFavoritas, // Abre el menú de favoritos
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () {
+                    final textoCompartir = widget.documentPath != null
+                        ? 'Estoy leyendo "${widget.titulo}" en OmniLibrary. ¡Échale un vistazo!'
+                        : 'Lectura recomendada: "${widget.titulo}".\n\nOmniLibrary App';
 
-              Share.share(textoCompartir);
-            },
+                    Share.share(textoCompartir);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune), // Botón de ajustes avanzados
+                  onPressed: _mostrarAjustesAvanzados,
+                ),
+              ],
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.tune), // Botón de ajustes avanzados
-            onPressed: _mostrarAjustesAvanzados,
-          ),
-        ],
+        ),
       ),
       // Botón flotante para el Diccionario cuando se selecciona texto en un PDF
       floatingActionButton:
@@ -1035,125 +1058,144 @@ class _ReaderScreenState extends State<ReaderScreen> {
       // Ocultamos los controles si es un PDF, ya que manejan su propio flujo.
       bottomNavigationBar: widget.isPdf
           ? null
-          : Container(
-              decoration: BoxDecoration(
-                color: _backgroundColor,
-                border: Border(
-                  top: BorderSide(color: Colors.grey.withOpacity(0.2)),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: SafeArea(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Controles de tamaño de letra
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.text_decrease, color: _textColor),
-                          onPressed: () => setState(
-                            () => _fontSize = (_fontSize > 14)
-                                ? _fontSize - 2
-                                : 14,
-                          ),
+          : AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              child: !_showUI
+                  ? const SizedBox.shrink()
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: _backgroundColor.withOpacity(0.9),
+                        border: Border(
+                          top: BorderSide(color: Colors.grey.withOpacity(0.2)),
                         ),
-                        IconButton(
-                          icon: Icon(Icons.text_increase, color: _textColor),
-                          onPressed: () => setState(
-                            () => _fontSize = (_fontSize < 30)
-                                ? _fontSize + 2
-                                : 30,
-                          ),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      child: SafeArea(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.text_decrease,
+                                    color: _textColor,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _fontSize = (_fontSize > 14)
+                                        ? _fontSize - 2
+                                        : 14,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.text_increase,
+                                    color: _textColor,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _fontSize = (_fontSize < 30)
+                                        ? _fontSize + 2
+                                        : 30,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                _ColorButton(
+                                  color: const Color(0xFFFFFFFF),
+                                  onTap: () => _cambiarTema('Blanco'),
+                                ),
+                                const SizedBox(width: 12),
+                                _ColorButton(
+                                  color: const Color(0xFFFBF0D9),
+                                  onTap: () => _cambiarTema('Amarillo'),
+                                ),
+                                const SizedBox(width: 12),
+                                _ColorButton(
+                                  color: const Color(0xFF000000),
+                                  onTap: () => _cambiarTema('Negro'),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                    // Controles de color de fondo
-                    Row(
-                      children: [
-                        _ColorButton(
-                          color: const Color(0xFFFFFFFF),
-                          onTap: () => _cambiarTema('Blanco'),
-                        ),
-                        const SizedBox(width: 12),
-                        _ColorButton(
-                          color: const Color(0xFFFBF0D9), // Botón Sepia
-                          onTap: () => _cambiarTema('Amarillo'),
-                        ),
-                        const SizedBox(width: 12),
-                        _ColorButton(
-                          color: const Color(0xFF000000), // OLED Botón
-                          onTap: () => _cambiarTema('Negro'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
             ),
       // CUERPO DEL ARTÍCULO
-      body: Stack(
-        children: [
-          // Capa Base: El Lector
-          Positioned.fill(
-            child: _cargandoProgreso
-                ? Center(child: CircularProgressIndicator(color: _textColor))
-                : widget.isPdf && widget.documentPath != null
-                ? _buildPdfViewer()
-                : widget.isEpub && widget.documentPath != null
-                ? _buildEpubViewer()
-                : _buildTextArticle(),
-          ),
-          // Capa Superior: La Isla Flotante del Pomodoro
-          if (_isPomodoroActive)
-            Positioned(
-              top: 16,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _isPomodoroBreak
-                        ? Colors.green.shade600
-                        : Colors.redAccent.shade400,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 15,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isPomodoroBreak ? Icons.coffee : Icons.psychology,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                          letterSpacing: 1.5,
-                          fontFamily: 'monospace',
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          setState(() => _showUI = !_showUI);
+          HapticFeedback.lightImpact();
+        },
+        child: Stack(
+          children: [
+            // Capa Base: El Lector
+            Positioned.fill(
+              child: _cargandoProgreso
+                  ? Center(child: CircularProgressIndicator(color: _textColor))
+                  : widget.isPdf && widget.documentPath != null
+                  ? _buildPdfViewer()
+                  : widget.isEpub && widget.documentPath != null
+                  ? _buildEpubViewer()
+                  : _buildTextArticle(),
+            ),
+            // Capa Superior: La Isla Flotante del Pomodoro
+            if (_isPomodoroActive)
+              Positioned(
+                top: 16,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _isPomodoroBreak
+                          ? Colors.green.shade600
+                          : Colors.redAccent.shade400,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _isPomodoroBreak ? Icons.coffee : Icons.psychology,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            letterSpacing: 1.5,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
