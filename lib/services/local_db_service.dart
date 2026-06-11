@@ -7,6 +7,7 @@ class LocalDbService {
   static const String _noticiasBox = 'noticiasBox';
   static const String _notasBox = 'notasBox';
   static const String _flashcardsBox = 'flashcardsBox';
+  static const String _tareasBox = 'tareasBox';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -16,6 +17,7 @@ class LocalDbService {
     await Hive.openBox<String>(_noticiasBox);
     await Hive.openBox<List<dynamic>>(_notasBox);
     await Hive.openBox<List<dynamic>>(_flashcardsBox);
+    await Hive.openBox<List<dynamic>>(_tareasBox);
   }
 
   static Box<Map<dynamic, dynamic>> get _box =>
@@ -79,6 +81,22 @@ class LocalDbService {
     List<Map<String, String>> flashcards,
   ) async {
     await _boxFlashcards.put('flashcards_lista', flashcards);
+  }
+
+  // --- Tareas ---
+  static Box<List<dynamic>> get _boxTareas =>
+      Hive.box<List<dynamic>>(_tareasBox);
+
+  static List<Map<String, dynamic>> obtenerTareas() {
+    final lista = _boxTareas.get('tareas_lista', defaultValue: []) ?? [];
+    return lista.map((e) {
+      final map = e as Map;
+      return map.map((key, value) => MapEntry(key.toString(), value));
+    }).toList();
+  }
+
+  static Future<void> guardarTareas(List<Map<String, dynamic>> tareas) async {
+    await _boxTareas.put('tareas_lista', tareas);
   }
 
   // --- Citas ---

@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'providers/theme_provider.dart';
 import 'providers/library_provider.dart';
-import 'providers/news_provider.dart';
-import 'providers/explore_provider.dart';
 import 'services/local_db_service.dart';
 import 'services/supabase_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -12,28 +10,33 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:flutter_native_splash/flutter_native_splash.dart'; // Comentado temporalmente
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Cargamos configuración primero
+  // 1. Retenemos el Splash Screen nativo en pantalla (Desactivado temporalmente)
+  // FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // 2. Cargamos configuración primero
   await dotenv.load(fileName: ".env");
 
-  // 2. Inicializamos servicios (Base de datos local + Nube)
+  // 3. Inicializamos servicios pesados (Base de datos local + Nube)
   await LocalDbService.init();
-  await SupabaseService.inicializar(); // Esta línea se encarga de todo lo de Supabase
+  await SupabaseService.inicializar();
 
-  // 3. Verificamos si es la primera vez que se abre la app
+  // 4. Verificamos si es la primera vez que se abre la app
   final prefs = await SharedPreferences.getInstance();
   final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+
+  // 5. Todo listo. Quitamos el Splash Screen suavemente (Desactivado temporalmente)
+  // FlutterNativeSplash.remove();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LibraryProvider()),
-        ChangeNotifierProvider(create: (_) => NewsProvider()),
-        ChangeNotifierProvider(create: (_) => ExploreProvider()),
       ],
       child: OmniLibraryApp(hasSeenOnboarding: hasSeenOnboarding),
     ),

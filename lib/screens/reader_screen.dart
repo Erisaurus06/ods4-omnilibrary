@@ -71,6 +71,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- NUEVAS VARIABLES PARA DIBUJO/RESALTADO ---
   final List<_Trazo> _trazos = [];
   _Trazo? _trazoActual;
+  final ValueNotifier<int> _trazosUpdater = ValueNotifier<int>(
+    0,
+  ); // Optimizador de dibujo
 
   // --- NUEVAS VARIABLES: POMODORO Y DICCIONARIO ---
   int _pomodoroSeconds = 0;
@@ -133,9 +136,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _inicializarLectura() async {
     if (widget.documentPath != null) {
       if (widget.isPdf) {
-        _paginaGuardadaPdf =
-            LocalDbService.obtenerProgreso('pdf_page_${widget.documentPath}') ??
-            1;
+        final dynamic progreso = LocalDbService.obtenerProgreso(
+          'pdf_page_${widget.documentPath}',
+        );
+        _paginaGuardadaPdf = (progreso is num) ? progreso.toInt() : 1;
       } else if (widget.isEpub) {
         _cfiGuardadoEpub = LocalDbService.obtenerProgreso(
           'epub_cfi_${widget.documentPath}',
@@ -293,6 +297,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
     _epubController?.dispose();
     _pdfViewerController.dispose();
+    _trazosUpdater.dispose();
     super.dispose();
   }
 
@@ -351,6 +356,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_isSpeaking) {
       // Si está hablando, lo silenciamos
       await _flutterTts.stop();
+      if (!mounted) return;
       setState(() => _isSpeaking = false);
     } else {
       // Si está callado, comenzamos la lectura del contenido
@@ -362,6 +368,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final textoLimpio = textoAleer.replaceAll('\n\n', ' . ');
 
       await _flutterTts.speak(textoLimpio);
+      if (!mounted) return;
       setState(() => _isSpeaking = true);
     }
   }
@@ -1456,28 +1463,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
           Positioned.fill(
             child: GestureDetector(
               onPanStart: (details) {
-                setState(() {
-                  _trazoActual = _Trazo(
-                    puntos: [details.localPosition],
-                    color: _drawMode
-                        ? Theme.of(context).primaryColor
-                        : _highlightColor,
-                    esResaltador: !_drawMode,
-                  );
-                  _trazos.add(_trazoActual!);
-                });
+                _trazoActual = _Trazo(
+                  puntos: [details.localPosition],
+                  color: _drawMode
+                      ? Theme.of(context).primaryColor
+                      : _highlightColor,
+                  esResaltador: !_drawMode,
+                );
+                _trazos.add(_trazoActual!);
+                _trazosUpdater.value++; // Notifica solo a la capa de pintura
               },
               onPanUpdate: (details) {
-                setState(() {
-                  _trazoActual?.puntos.add(details.localPosition);
-                });
+                if (_trazoActual != null) {
+                  _trazoActual!.puntos.add(details.localPosition);
+                  _trazosUpdater
+                      .value++; // Dibuja fluido a 60/120fps sin bloquear la UI
+                }
               },
               onPanEnd: (details) {
-                setState(() => _trazoActual = null);
+                _trazoActual = null;
               },
-              child: CustomPaint(
-                painter: _AnotacionPainter(_trazos),
-                size: Size.infinite,
+              child: RepaintBoundary(
+                // Aísla la pintura del PDF subyacente
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _trazosUpdater,
+                  builder: (context, _, __) {
+                    return CustomPaint(
+                      painter: _AnotacionPainter(_trazos),
+                      size: Size.infinite,
+                    );
+                  },
+                ),
               ),
             ),
           ),

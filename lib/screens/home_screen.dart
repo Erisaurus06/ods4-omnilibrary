@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:omnilibrary/screens/reader_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'reader_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -10,9 +11,11 @@ import '../services/supabase_service.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+// import 'package:google_sign_in/google_sign_in.dart'; // Comentado por error de importación
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:pdf_text/pdf_text.dart';
+import '../services/ai_translation_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -144,6 +147,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// --- FUNCIONES TOP-LEVEL PARA ISOLATES (COMPUTE) ---
+// Estas funciones se ejecutan en un hilo secundario para evitar el "Jank" (caída de FPS)
+// durante la inicialización de grandes volúmenes de datos.
+Map<String, dynamic> _procesarNotasEnFondo(Map<String, dynamic> data) {
+  final notas = List<Map<String, String>>.from(data['notas'] ?? []);
+  final tareas = List<Map<String, dynamic>>.from(data['tareas'] ?? []);
+
+  // Simulamos un ordenamiento pesado de notas por fecha (más recientes primero)
+  notas.sort((a, b) {
+    final fechaA =
+        DateTime.tryParse(a['fecha'] ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final fechaB =
+        DateTime.tryParse(b['fecha'] ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    return fechaB.compareTo(fechaA);
+  });
+
+  return {'notas': notas, 'tareas': tareas};
+}
+
 // --- SECCIÓN 1: APUNTES (Funcionalidad de Post-its) ---
 
 class _SeccionApuntes extends StatefulWidget {
@@ -161,6 +185,7 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
 
   int _modoVistaApuntes = 0; // 0: Muro de Notas, 1: Libreta de Tareas
   List<Map<String, dynamic>> _misTareas = [];
+  bool _isLoading = true; // Estado para animación de carga inicial
 
   @override
   void initState() {
@@ -168,32 +193,48 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
     _cargarApuntes();
   }
 
-  void _cargarApuntes() {
-    setState(() {
-      _misApuntes = LocalDbService.obtenerNotas();
-      _misTareas = LocalDbService.obtenerTareas(); // Cargamos tareas reales
-      
-      // Si la memoria está vacía (primera vez que usa la app), inyectamos un ejemplo
-      if (_misApuntes.isEmpty) {
-        _misApuntes = [
-          {
-            'titulo': 'Idea para App 💡',
-            'contenido':
-                'Un Tinder para libros. Deslizas portadas y si hay match, te recomienda leerlo.',
-            'color': '0xFFFFF59D',
-            'fecha': DateTime.now().toIso8601String(),
-          },
-          {
-            'titulo': 'Frase del día',
-            'contenido':
-                'La única forma de hacer un gran trabajo es amar lo que haces. - Steve Jobs',
-            'color': '0xFFB39DDB',
-            'fecha': DateTime.now().toIso8601String(),
-          },
-        ];
-        LocalDbService.guardarNotas(_misApuntes); // Las guardamos en disco
-      }
+  Future<void> _cargarApuntes() async {
+    // 1. Diferimos la carga unos milisegundos para permitir que la transición
+    //    de pantalla y el BottomNavigationBar terminen de renderizarse sin tirones.
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    // 2. Extraemos crudos de memoria principal de forma ligera
+    var notasRaw = LocalDbService.obtenerNotas();
+    var tareasRaw = LocalDbService.obtenerTareas();
+
+    if (notasRaw.isEmpty) {
+      notasRaw = [
+        {
+          'titulo': 'Idea para App 💡',
+          'contenido':
+              'Un Tinder para libros. Deslizas portadas y si hay match, te recomienda leerlo.',
+          'color': '0xFFFFF59D',
+          'fecha': DateTime.now().toIso8601String(),
+        },
+        {
+          'titulo': 'Frase del día',
+          'contenido':
+              'La única forma de hacer un gran trabajo es amar lo que haces. - Steve Jobs',
+          'color': '0xFFB39DDB',
+          'fecha': DateTime.now().toIso8601String(),
+        },
+      ];
+      LocalDbService.guardarNotas(notasRaw);
+    }
+
+    // 3. Offload a un Isolate usando 'compute' para mapear y procesar sin afectar los FPS
+    final procesado = await compute(_procesarNotasEnFondo, <String, dynamic>{
+      'notas': notasRaw,
+      'tareas': tareasRaw,
     });
+
+    if (mounted) {
+      setState(() {
+        _misApuntes = List<Map<String, String>>.from(procesado['notas']);
+        _misTareas = List<Map<String, dynamic>>.from(procesado['tareas']);
+        _isLoading = false;
+      });
+    }
   }
 
   String _formatearFecha(String? isoDate) {
@@ -275,10 +316,15 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Container(
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -286,24 +332,47 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                 controller: tareaController,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(hintText: '¿Qué necesitas recordar?', border: InputBorder.none, hintStyle: TextStyle(fontSize: 18)),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                decoration: const InputDecoration(
+                  hintText: '¿Qué necesitas recordar?',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(fontSize: 18),
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
-                width: double.infinity, height: 50,
+                width: double.infinity,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: () {
                     if (tareaController.text.isNotEmpty) {
-                      setState(() { _misTareas.insert(0, {'titulo': tareaController.text, 'completada': false, 'fecha': 'Próximamente'}); });
+                      setState(() {
+                        _misTareas.insert(0, {
+                          'titulo': tareaController.text,
+                          'completada': false,
+                          'fecha': 'Próximamente',
+                        });
+                      });
                       LocalDbService.guardarTareas(_misTareas);
                       Navigator.pop(context);
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Theme.of(context).scaffoldBackgroundColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('Añadir a mi lista', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Añadir a mi lista',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -377,7 +446,14 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
           child: const Icon(Icons.edit_square),
         ),
       ),
-      body: _modoVistaApuntes == 0
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).primaryColor,
+                strokeWidth: 2,
+              ).animate().fade(duration: 400.ms),
+            )
+          : _modoVistaApuntes == 0
           ? _construirMuroDeNotas(isDark)
           : _construirLibretaTareas(isDark),
     );
@@ -399,7 +475,9 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
               .toList();
 
     return Container(
-      color: Theme.of(context).scaffoldBackgroundColor, // Fondo sólido y limpio estilo Notion
+      color: Theme.of(
+        context,
+      ).scaffoldBackgroundColor, // Fondo sólido y limpio estilo Notion
       child: Column(
         children: [
           // Barra de Búsqueda Estilo iOS
@@ -412,7 +490,9 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade800.withOpacity(0.6) : Colors.grey.shade300.withOpacity(0.8),
+                    color: isDark
+                        ? Colors.grey.shade800.withOpacity(0.6)
+                        : Colors.grey.shade300.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: TextField(
@@ -460,121 +540,141 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       ],
                     ),
                   )
-                : Expanded(
-                    child: GridView.builder(
-                      physics: const BouncingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                      ),
-                      itemCount: apuntesFiltrados.length,
-                      itemBuilder: (context, index) {
-                        final apunte = apuntesFiltrados[index];
-                        final realIndex = _misApuntes.indexOf(apunte);
-                        final esTarea = apunte['tipo'] == 'tarea';
-                        final isCompletada = apunte['completada'] == 'true';
+                : GridView.builder(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                        ),
+                    itemCount: apuntesFiltrados.length,
+                    itemBuilder: (context, index) {
+                      final apunte = apuntesFiltrados[index];
+                      final realIndex = _misApuntes.indexOf(apunte);
+                      final esTarea = apunte['tipo'] == 'tarea';
+                      final isCompletada = apunte['completada'] == 'true';
 
-                        return GestureDetector(
-                          onTap: () {
-                            if (esTarea) {
-                              HapticFeedback.lightImpact();
-                              setState(() {
-                                _misApuntes[realIndex]['completada'] = isCompletada ? 'false' : 'true';
-                              });
-                              LocalDbService.guardarNotas(_misApuntes);
-                            } else {
-                              _mostrarCreadorHibrido(
-                                context,
-                                apunteExistente: apunte,
-                                index: realIndex,
-                              );
-                            }
-                          },
-                          onLongPress: () {
-                            _confirmarEliminar(realIndex);
-                          },
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 200),
-                            opacity: isCompletada ? 0.5 : 1.0,
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(isDark ? 0.0 : 0.03),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
+                      return GestureDetector(
+                        onTap: () {
+                          if (esTarea) {
+                            HapticFeedback.lightImpact();
+                            setState(() {
+                              _misApuntes[realIndex]['completada'] =
+                                  isCompletada ? 'false' : 'true';
+                            });
+                            LocalDbService.guardarNotas(_misApuntes);
+                          } else {
+                            _mostrarCreadorDeApuntes(
+                              context,
+                              apunteExistente: apunte,
+                              index: realIndex,
+                            );
+                          }
+                        },
+                        onLongPress: () {
+                          _confirmarEliminar(realIndex);
+                        },
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: isCompletada ? 0.5 : 1.0,
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(
+                                    isDark ? 0.0 : 0.03,
                                   ),
-                                ],
-                                border: Border.all(
-                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
-                                  width: 1,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      if (esTarea) ...[
-                                        Icon(
-                                          isCompletada ? Icons.check_circle : Icons.radio_button_unchecked,
-                                          size: 18,
-                                          color: isCompletada ? Colors.green : Theme.of(context).primaryColor,
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          apunte['titulo']?.isNotEmpty == true ? apunte['titulo']! : 'Nueva nota',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                            color: Theme.of(context).primaryColor,
-                                            decoration: isCompletada ? TextDecoration.lineThrough : null,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    apunte.containsKey('fecha') ? _formatearFecha(apunte['fecha']) : '',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(context).primaryColor.withOpacity(0.5),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (!esTarea)
-                                    Expanded(
-                                      child: Text(
-                                        apunte['contenido']?.isNotEmpty == true ? apunte['contenido']! : 'No hay texto adicional',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.4,
-                                          color: Theme.of(context).primaryColor.withOpacity(0.8),
-                                        ),
-                                        maxLines: 4,
-                                        overflow: TextOverflow.fade,
-                                      ),
-                                    ),
-                                ],
+                              ],
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.1)
+                                    : Colors.black.withOpacity(0.05),
+                                width: 1,
                               ),
                             ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (esTarea) ...[
+                                      Icon(
+                                        isCompletada
+                                            ? Icons.check_circle
+                                            : Icons.radio_button_unchecked,
+                                        size: 18,
+                                        color: isCompletada
+                                            ? Colors.green
+                                            : Theme.of(context).primaryColor,
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Expanded(
+                                      child: Text(
+                                        apunte['titulo']?.isNotEmpty == true
+                                            ? apunte['titulo']!
+                                            : 'Nueva nota',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Theme.of(context).primaryColor,
+                                          decoration: isCompletada
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  apunte.containsKey('fecha')
+                                      ? _formatearFecha(apunte['fecha'])
+                                      : '',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).primaryColor.withOpacity(0.5),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                if (!esTarea)
+                                  Expanded(
+                                    child: Text(
+                                      apunte['contenido']?.isNotEmpty == true
+                                          ? apunte['contenido']!
+                                          : 'No hay texto adicional',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        height: 1.4,
+                                        color: Theme.of(
+                                          context,
+                                        ).primaryColor.withOpacity(0.8),
+                                      ),
+                                      maxLines: 4,
+                                      overflow: TextOverflow.fade,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
@@ -628,6 +728,181 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
       ),
     );
   }
+
+  Widget _construirLibretaTareas(bool isDark) {
+    final tareasFiltradas = _searchQuery.isEmpty
+        ? _misTareas
+        : _misTareas
+              .where(
+                (t) => (t['titulo'] ?? '').toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ),
+              )
+              .toList();
+
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.grey.shade800.withOpacity(0.6)
+                        : Colors.grey.shade300.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextField(
+                    onChanged: (val) {
+                      setState(() => _searchQuery = val);
+                    },
+                    decoration: const InputDecoration(
+                      icon: Icon(Icons.search, color: Colors.grey, size: 20),
+                      hintText: 'Buscar tarea...',
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: tareasFiltradas.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.fact_check_outlined,
+                          size: 80,
+                          color: Colors.blueGrey.withOpacity(0.3),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Tu libreta está vacía.',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                    itemCount: tareasFiltradas.length,
+                    itemBuilder: (context, index) {
+                      final tarea = tareasFiltradas[index];
+                      final realIndex = _misTareas.indexOf(tarea);
+                      final isCompletada =
+                          tarea['completada'] == true ||
+                          tarea['completada'] == 'true';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: isCompletada ? 0.5 : 1.0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(
+                                    isDark ? 0.0 : 0.03,
+                                  ),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.1)
+                                    : Colors.black.withOpacity(0.05),
+                                width: 1,
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                setState(() {
+                                  _misTareas[realIndex]['completada'] =
+                                      !isCompletada;
+                                });
+                                LocalDbService.guardarTareas(_misTareas);
+                              },
+                              leading: Icon(
+                                isCompletada
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                                color: isCompletada
+                                    ? Colors.green
+                                    : Theme.of(context).primaryColor,
+                                size: 26,
+                              ),
+                              title: Text(
+                                tarea['titulo'] ?? 'Nueva tarea',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Theme.of(context).primaryColor,
+                                  decoration: isCompletada
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                onPressed: () {
+                                  HapticFeedback.mediumImpact();
+                                  setState(() {
+                                    _misTareas.removeAt(realIndex);
+                                  });
+                                  LocalDbService.guardarTareas(_misTareas);
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Top-level Isolate Flashcards
+List<Map<String, String>> _procesarFlashcardsEnFondo(
+  List<Map<String, String>> rawData,
+) {
+  final flashcards = List<Map<String, String>>.from(rawData);
+  // Ordenamos alfabéticamente por mazo para agrupar visualmente si la data es muy grande
+  flashcards.sort(
+    (a, b) => (a['mazo'] ?? 'General').compareTo(b['mazo'] ?? 'General'),
+  );
+  return flashcards;
 }
 
 // --- SECCIÓN 2: FLASHCARDS (Tarjetas giratorias de estudio) ---
@@ -641,7 +916,8 @@ class _SeccionFlashcards extends StatefulWidget {
 class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
   final _tituloController = TextEditingController();
   final _contenidoController = TextEditingController();
-  final _mazoController = TextEditingController(); // Controlador para Categorías
+  final _mazoController =
+      TextEditingController(); // Controlador para Categorías
   List<Map<String, String>> _misFlashcards = [];
 
   int _modoFlashcards =
@@ -649,7 +925,9 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
 
   bool _quizActivo = false;
   int _quizIndex = 0;
-  List<Map<String, String>> _dueFlashcards = []; // Tarjetas que tocan repasar hoy
+  List<Map<String, String>> _dueFlashcards =
+      []; // Tarjetas que tocan repasar hoy
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -657,10 +935,17 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
     _cargarFlashcards();
   }
 
-  void _cargarFlashcards() {
-    setState(() {
-      _misFlashcards = LocalDbService.obtenerFlashcards();
-    });
+  Future<void> _cargarFlashcards() async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    final raw = LocalDbService.obtenerFlashcards();
+    final procesado = await compute(_procesarFlashcardsEnFondo, raw);
+
+    if (mounted) {
+      setState(() {
+        _misFlashcards = procesado;
+        _isLoading = false;
+      });
+    }
   }
 
   void _mostrarCreadorDeFlashcards(
@@ -753,7 +1038,12 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                             color: Theme.of(context).primaryColor,
                           ),
                           decoration: InputDecoration(
-                            icon: Icon(Icons.folder, color: Theme.of(context).primaryColor.withOpacity(0.5)),
+                            icon: Icon(
+                              Icons.folder,
+                              color: Theme.of(
+                                context,
+                              ).primaryColor.withOpacity(0.5),
+                            ),
                             hintText: 'Mazo o Categoría (Ej. Biología)',
                             border: InputBorder.none,
                           ),
@@ -794,19 +1084,26 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                                       ...flashcardExistente, // Conserva datos de SRS previos
                                       'titulo': titulo,
                                       'contenido': contenido,
-                                      'mazo': _mazoController.text.trim().isEmpty ? 'General' : _mazoController.text.trim(),
+                                      'mazo':
+                                          _mazoController.text.trim().isEmpty
+                                          ? 'General'
+                                          : _mazoController.text.trim(),
                                       'color': selectedColor,
                                     };
                                   } else {
                                     _misFlashcards.insert(0, {
                                       'titulo': titulo,
                                       'contenido': contenido,
-                                      'mazo': _mazoController.text.trim().isEmpty ? 'General' : _mazoController.text.trim(),
+                                      'mazo':
+                                          _mazoController.text.trim().isEmpty
+                                          ? 'General'
+                                          : _mazoController.text.trim(),
                                       'color': selectedColor,
                                       'reps': '0',
                                       'ease': '2.5',
                                       'interval': '0',
-                                      'nextReview': DateTime.now().toIso8601String(), // Repasar inmediatamente
+                                      'nextReview': DateTime.now()
+                                          .toIso8601String(), // Repasar inmediatamente
                                     });
                                   }
                                 });
@@ -958,7 +1255,14 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
           child: const Icon(Icons.add),
         ),
       ),
-      body: _modoFlashcards == 0
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).primaryColor,
+                strokeWidth: 2,
+              ).animate().fade(duration: 400.ms),
+            )
+          : _modoFlashcards == 0
           ? _construirGridTarjetas()
           : _modoFlashcards == 1
           ? _construirModoEstudio()
@@ -967,11 +1271,19 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
   }
 
   Widget _construirGridTarjetas() {
-    final mazos = _misFlashcards.map((f) => f['mazo'] ?? 'General').toSet().toList();
+    final mazos = _misFlashcards
+        .map((f) => f['mazo'] ?? 'General')
+        .toSet()
+        .toList();
 
     if (_misFlashcards.isEmpty) {
       return Center(
-        child: Text('Tus flashcards aparecerán aquí organizadas por mazos.', style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.5))),
+        child: Text(
+          'Tus flashcards aparecerán aquí organizadas por mazos.',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor.withOpacity(0.5),
+          ),
+        ),
       );
     }
 
@@ -981,7 +1293,9 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
       itemCount: mazos.length,
       itemBuilder: (context, index) {
         final mazo = mazos[index];
-        final tarjetasMazo = _misFlashcards.where((f) => (f['mazo'] ?? 'General') == mazo).toList();
+        final tarjetasMazo = _misFlashcards
+            .where((f) => (f['mazo'] ?? 'General') == mazo)
+            .toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -990,7 +1304,10 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 children: [
-                  Icon(Icons.folder_open, color: Theme.of(context).primaryColor.withOpacity(0.7)),
+                  Icon(
+                    Icons.folder_open,
+                    color: Theme.of(context).primaryColor.withOpacity(0.7),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     mazo,
@@ -1023,7 +1340,10 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
                   final realIndex = _misFlashcards.indexOf(flashcard);
                   return Container(
                     width: 160,
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     child: _FlashcardItem(
                       nota: flashcard,
                       onLongPress: () => _confirmarEliminar(realIndex),
@@ -1046,14 +1366,22 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
 
   Widget _construirModoEstudio() {
     if (_misFlashcards.isEmpty) {
-      return Center(child: Text('Agrega flashcards primero para estudiar.', style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.5))));
+      return Center(
+        child: Text(
+          'Agrega flashcards primero para estudiar.',
+          style: TextStyle(
+            color: Theme.of(context).primaryColor.withOpacity(0.5),
+          ),
+        ),
+      );
     }
 
     // Filtrar tarjetas que deben repasarse hoy (o que están atrasadas)
     final now = DateTime.now();
     final pendientes = _misFlashcards.where((fc) {
       final nextReviewStr = fc['nextReview'];
-      if (nextReviewStr == null) return true; // Si es vieja sin algoritmo, es pendiente
+      if (nextReviewStr == null)
+        return true; // Si es vieja sin algoritmo, es pendiente
       final nextReview = DateTime.tryParse(nextReviewStr) ?? now;
       return nextReview.isBefore(now) || nextReview.isAtSameMomentAs(now);
     }).toList();
@@ -1079,26 +1407,39 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
             if (pendientes.isNotEmpty)
               Text(
                 'Tienes ${pendientes.length} tarjetas pendientes para hoy.',
-                style: const TextStyle(fontSize: 16, color: Colors.green, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
               )
             else
               const Text(
                 '¡Todo al día! No tienes tarjetas pendientes. 🎉',
-                style: TextStyle(fontSize: 16, color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.orangeAccent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: pendientes.isEmpty ? null : () {
-                  setState(() {
-                    _dueFlashcards = pendientes;
-                    _quizActivo = true;
-                    _quizIndex = 0;
-                  });
-              },
+              onPressed: pendientes.isEmpty
+                  ? null
+                  : () {
+                      setState(() {
+                        _dueFlashcards = pendientes;
+                        _quizActivo = true;
+                        _quizIndex = 0;
+                      });
+                    },
               icon: const Icon(Icons.play_arrow),
               label: const Text('Iniciar Repaso'),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 textStyle: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1114,15 +1455,28 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('Repaso ${_quizIndex + 1} de ${_dueFlashcards.length}', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor.withOpacity(0.5))),
+        Text(
+          'Repaso ${_quizIndex + 1} de ${_dueFlashcards.length}',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).primaryColor.withOpacity(0.5),
+          ),
+        ),
         const SizedBox(height: 24),
         SizedBox(
           height: 380,
           width: MediaQuery.of(context).size.width * 0.8,
-          child: _FlashcardItem(nota: flashcard, onLongPress: (){}, onEdit: (){}), // Reutilizamos nuestra bella tarjeta 3D
+          child: _FlashcardItem(
+            nota: flashcard,
+            onLongPress: () {},
+            onEdit: () {},
+          ), // Reutilizamos nuestra bella tarjeta 3D
         ),
         const SizedBox(height: 30),
-        const Text('¿Qué tan fácil fue recordar esto?', style: TextStyle(color: Colors.grey, fontSize: 14)),
+        const Text(
+          '¿Qué tan fácil fue recordar esto?',
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1153,7 +1507,10 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        child: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
       ),
     );
   }
@@ -1186,7 +1543,8 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
 
     // Ajustamos la facilidad (ease factor)
     ease = ease + (0.1 - (5 - calidad) * (0.08 + (5 - calidad) * 0.02));
-    if (ease < 1.3) ease = 1.3; // Límite inferior para evitar intervalos estancados
+    if (ease < 1.3)
+      ease = 1.3; // Límite inferior para evitar intervalos estancados
 
     final nextReview = DateTime.now().add(Duration(days: interval));
 
@@ -1218,14 +1576,14 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
   }
 
   Widget _construirBloquesNotas() {
-    return Center(
-      child: Text(
-        'Aquí se mostrarán tus bloques de notas estructuradas\npara repasar antes del Quiz.',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 16, color: Colors.grey),
-      ),
     if (_misFlashcards.isEmpty) {
-      return Center(child: Text('Tus bloques de estudio se verán aquí.', style: TextStyle(color: Theme.of(context).primaryColor.withOpacity(0.5))));
+      return Center(
+        child: Text(
+          'Aquí se mostrarán tus bloques de notas estructuradas\npara repasar antes del Quiz.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
@@ -1237,22 +1595,44 @@ class _SeccionFlashcardsState extends State<_SeccionFlashcards> {
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Color(int.parse(nota['color']!)).withOpacity(0.15), // Color pastel tenue
+            color: Color(
+              int.parse(nota['color']!),
+            ).withOpacity(0.15), // Color pastel tenue
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Color(int.parse(nota['color']!)).withOpacity(0.4)),
+            border: Border.all(
+              color: Color(int.parse(nota['color']!)).withOpacity(0.4),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(Icons.auto_awesome, color: Color(int.parse(nota['color']!)), size: 20),
+                  Icon(
+                    Icons.auto_awesome,
+                    color: Color(int.parse(nota['color']!)),
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(nota['titulo']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+                  Expanded(
+                    child: Text(
+                      nota['titulo']!,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
-              Text(nota['contenido']!, style: const TextStyle(fontSize: 15, height: 1.5)),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(),
+              ),
+              Text(
+                nota['contenido']!,
+                style: const TextStyle(fontSize: 15, height: 1.5),
+              ),
             ],
           ),
         );
@@ -1341,7 +1721,10 @@ class _FlashcardItemState extends State<_FlashcardItem>
                     offset: const Offset(0, 4),
                   ),
                 ],
-                border: Border.all(color: Colors.black.withOpacity(0.05), width: 1),
+                border: Border.all(
+                  color: Colors.black.withOpacity(0.05),
+                  width: 1,
+                ),
               ),
               child: isBackShowing
                   ? Transform(
@@ -1432,8 +1815,10 @@ class _FlashcardItemState extends State<_FlashcardItem>
 // --- SECCIÓN 4: AJUSTES (Configuración y APIs) ---
 
 void _mostrarVincularGoogleBooks(BuildContext context) {
-  // The GoogleSignIn instance is a singleton.
-  final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+  // Desactivado temporalmente para evitar errores de compilación
+  // final GoogleSignIn googleSignIn = GoogleSignIn(
+  //   scopes: ['email', 'https://www.googleapis.com/auth/books'],
+  // );
 
   showModalBottomSheet(
     context: context,
@@ -1481,33 +1866,29 @@ void _mostrarVincularGoogleBooks(BuildContext context) {
                 icon: const Icon(Icons.login),
                 label: const Text('Autenticar con Google'),
                 onPressed: () async {
-                  try {
-                    // The `signIn` method is now `authenticate`, and scopes are passed here.
-                    final account = await googleSignIn.authenticate(
-                      scopeHint: [
-                        'email',
-                        'https://www.googleapis.com/auth/books',
-                      ],
-                    );
-
-                    Navigator.pop(context); // Cierra el modal inferior
-                    // `authenticate` throws on failure, so `account` will not be null here.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Vinculado con éxito a: ${account.email}',
-                        ),
+                  Navigator.pop(context); // Cierra el modal inferior
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Integración con Google temporalmente deshabilitada.',
                       ),
-                    );
-                    // OPCIONAL: Guarda `account.authHeaders` o el Token para inyectarlo en tus peticiones a la API
-                  } catch (e) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error al conectar con Google: $e'),
-                      ),
-                    );
-                  }
+                    ),
+                  );
+                  /*
+                  // try {
+                  //   final account = await googleSignIn.signIn();
+                  //   if (!context.mounted) return;
+                  //   Navigator.pop(context);
+                  //   if (account != null) {
+                  //     ScaffoldMessenger.of(context).showSnackBar(
+                  //       SnackBar(content: Text('Vinculado con éxito a: \${account.email}')),
+                  //     );
+                  //   }
+                  // } catch (e) {
+                  //   Navigator.pop(context);
+                  //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al conectar con Google: \$e')));
+                  // }
+                  */
                 },
               ),
             ),
@@ -1577,7 +1958,9 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                color: isDark
+                    ? Colors.white.withOpacity(0.1)
+                    : Colors.black.withOpacity(0.05),
                 width: 1,
               ),
               boxShadow: [
@@ -1585,15 +1968,19 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                   color: Colors.black.withOpacity(0.02),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
-                )
-              ]
+                ),
+              ],
             ),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 36,
                   backgroundColor: Theme.of(context).primaryColor,
-                  child: Icon(Icons.person, size: 36, color: Theme.of(context).scaffoldBackgroundColor),
+                  child: Icon(
+                    Icons.person,
+                    size: 36,
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1610,10 +1997,13 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        SupabaseService.client.auth.currentUser?.email ?? 'Usuario Invitado',
+                        SupabaseService.client.auth.currentUser?.email ??
+                            'Usuario Invitado',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Theme.of(context).primaryColor.withOpacity(0.6),
+                          color: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.6),
                         ),
                       ),
                     ],
@@ -1645,7 +2035,7 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               onTap: () => _confirmarCerrarSesion(context),
             ),
           ]),
-          
+
           const SizedBox(height: 32),
           // --- 2. APARIENCIA ---
           _buildSectionHeader('APARIENCIA'),
@@ -1666,7 +2056,7 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               onChanged: (val) => setState(() => _modoLectura = val),
             ),
           ]),
-          
+
           const SizedBox(height: 32),
           // --- 3. INTEGRACIONES Y APIS ---
           _buildSectionHeader('INTEGRACIONES Y APIS'),
@@ -1699,12 +2089,14 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               onTap: () async {
                 await LocalDbService.limpiarCache();
                 _actualizarTamanoCache();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Caché eliminada correctamente 🧹'),
-                    backgroundColor: Theme.of(context).cardColor,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Caché eliminada correctamente 🧹'),
+                      backgroundColor: Theme.of(context).cardColor,
+                    ),
+                  );
+                }
               },
             ),
           ]),
@@ -1726,7 +2118,9 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
               icono: Icons.shield_outlined,
               colorIcono: Colors.teal,
               onTap: () async {
-                final uri = Uri.parse('https://www.google.com/policies/privacy/');
+                final uri = Uri.parse(
+                  'https://www.google.com/policies/privacy/',
+                );
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.inAppWebView);
                 }
@@ -1762,7 +2156,9 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+          color: isDark
+              ? Colors.white.withOpacity(0.1)
+              : Colors.black.withOpacity(0.05),
           width: 1,
         ),
         boxShadow: [
@@ -1771,7 +2167,7 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
-        ]
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
@@ -1814,7 +2210,10 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'Salir',
-              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -1975,6 +2374,20 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
+// Top-level Isolate Documentos (Biblioteca)
+List<Map<String, dynamic>> _procesarDocumentosEnFondo(
+  List<Map<String, dynamic>> rawData,
+) {
+  final docs = List<Map<String, dynamic>>.from(rawData);
+  // Ordenar alfabéticamente por título de forma veloz
+  docs.sort(
+    (a, b) => (a['titulo'] ?? '').toString().compareTo(
+      (b['titulo'] ?? '').toString(),
+    ),
+  );
+  return docs;
+}
+
 // --- SECCIÓN 2: BIBLIOTECA (Tus PDFs y Libros REALES) ---
 class _SeccionBiblioteca extends StatefulWidget {
   const _SeccionBiblioteca();
@@ -1987,6 +2400,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
   List<Map<String, dynamic>> _documentos = [];
   bool _vistaCuadricula = false; // Controla si vemos lista o grid
   String _searchQuery = ''; // Búsqueda local
+  bool _isLoading = true;
 
   // Genera un gradiente único y elegante basado en el título del libro
   List<Color> _generarColoresPortada(String titulo) {
@@ -2005,10 +2419,17 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
     _cargarBiblioteca();
   }
 
-  // Ahora carga SOLO lo que realmente existe en la base de datos
-  void _cargarBiblioteca() {
-    final docsDB = LocalDbService.obtenerDocumentos();
-    setState(() => _documentos = docsDB);
+  Future<void> _cargarBiblioteca() async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    final raw = LocalDbService.obtenerDocumentos();
+    final procesado = await compute(_procesarDocumentosEnFondo, raw);
+
+    if (mounted) {
+      setState(() {
+        _documentos = procesado;
+        _isLoading = false;
+      });
+    }
   }
 
   // --- NUEVO: Menú contextual para documentos ---
@@ -2027,7 +2448,10 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Text(
                 doc['titulo'],
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -2042,18 +2466,36 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               },
             ),
             // Solo muestra la opción de IA para PDFs locales
-            if (doc['esPdf'] == true && doc['path'] != null)
+            if (doc['esPdf'] == true && doc['path'] != null) ...[
               ListTile(
                 leading: const Icon(Icons.auto_awesome),
                 title: const Text('Generar Flashcards con IA'),
                 onTap: () {
                   Navigator.pop(context);
-                  _generarFlashcardsDesdePdf(doc['path']);
+                  _generarFlashcardsDesdePdf(doc['path'] as String);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.summarize_outlined),
+                title: const Text('Resumir PDF con IA'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _resumirPdfConIA(
+                    doc['path'] as String,
+                    doc['titulo'] as String,
+                  );
+                },
+              ),
+            ],
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              title: const Text('Eliminar', style: TextStyle(color: Colors.redAccent)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                'Eliminar',
+                style: TextStyle(color: Colors.redAccent),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _borrarDocumento(index);
@@ -2076,35 +2518,159 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
-            Text("Analizando PDF con IA...", style: TextStyle(color: Theme.of(context).primaryColor)),
+            Text(
+              "Analizando PDF con IA...",
+              style: TextStyle(color: Theme.of(context).primaryColor),
+            ),
           ],
         ),
       ),
     );
 
     try {
-      // --- ¡IMPORTANTE! ---
-      // Para que esto funcione, necesitas añadir `pdf_text: ^0.5.0` a tu `pubspec.yaml`
-      // y luego importar `import 'package:pdf_text/pdf_text.dart';`
-      // Descomenta las 2 líneas siguientes cuando lo hayas hecho:
-      // PDFDoc doc = await PDFDoc.fromPath(path);
-      // final String text = await doc.text;
+      // Extraemos el texto de forma asíncrona usando la librería nativa
+      PDFDoc doc = await PDFDoc.fromPath(path);
+      final String text = await doc.text;
 
-      // --- SIMULACIÓN DE TEXTO EXTRAÍDO (BORRAR DESPUÉS DE INSTALAR `pdf_text`) ---
-      await Future.delayed(const Duration(seconds: 2));
-      const String text = 'La fotosíntesis es el proceso en el cual la energía de la luz se convierte en energía química en forma de azúcares. El cerebro humano es el centro del sistema nervioso.';
-      // --- FIN DE LA SIMULACIÓN ---
-
-      if (text.trim().isEmpty) throw Exception("El PDF no contiene texto extraíble.");
+      if (text.trim().isEmpty)
+        throw Exception("El PDF no contiene texto extraíble.");
 
       final aiService = AiTranslationService();
       final nuevasFlashcards = await aiService.getFlashcardsFromText(text);
 
-      Navigator.pop(context); // Cerrar diálogo de carga
-      // ... (código para procesar y guardar las flashcards)
+      if (context.mounted) Navigator.pop(context); // Cerrar diálogo de carga
+
+      if (nuevasFlashcards.isNotEmpty) {
+        // Obtener el mazo actual persistente en la Base de Datos
+        final flashcardsActuales = LocalDbService.obtenerFlashcards();
+
+        // Agregamos las nuevas tarjetas al tope de la lista formateadas para nuestro Sistema de Repetición Espaciada
+        for (var fc in nuevasFlashcards) {
+          flashcardsActuales.insert(0, {
+            ...fc,
+            'reps': '0',
+            'ease': '2.5',
+            'interval': '0',
+            'nextReview': DateTime.now().toIso8601String(),
+          });
+        }
+
+        // Lo guardamos directo en disco para que aparezcan en el Mazo de inmediato
+        LocalDbService.guardarFlashcards(flashcardsActuales);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '¡Se han guardado ${nuevasFlashcards.length} tarjetas inteligentes en tu mazo!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'La IA no pudo extraer conceptos claros de este documento.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
     } catch (e) {
-      Navigator.pop(context);
-      // ... (código para manejar errores)
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al procesar el PDF: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  // --- NUEVO: Lógica para Generar un Resumen Total del PDF ---
+  Future<void> _resumirPdfConIA(String path, String titulo) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text(
+              "Leyendo PDF para resumir...",
+              style: TextStyle(color: Theme.of(context).primaryColor),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      PDFDoc doc = await PDFDoc.fromPath(path);
+      String text = await doc.text;
+
+      if (text.trim().isEmpty)
+        throw Exception("El PDF no contiene texto extraíble.");
+
+      // Para evitar un límite de tokens (textos kilométricos), cortamos a 15,000 caracteres
+      // suficiente para que la IA entienda el contexto macro de un archivo largo.
+      if (text.length > 15000) text = text.substring(0, 15000);
+
+      final aiService = AiTranslationService();
+      final resumen = await aiService.getResumen(titulo, text);
+
+      if (context.mounted) {
+        Navigator.pop(context); // Cerrar diálogo de carga
+
+        // Mostramos el Resumen generado en un cuadro emergente
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: Theme.of(context).cardColor,
+            title: Text(
+              'Resumen de la IA ✨',
+              style: TextStyle(
+                color: Theme.of(context).primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Text(
+                resumen,
+                style: TextStyle(
+                  color: Theme.of(context).primaryColor,
+                  height: 1.5,
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al leer el documento: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -2140,7 +2706,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
       );
 
       if (resultado != null && resultado.files.single.path != null) {
-        final nuevoDoc = {
+        final nuevoDoc = <String, dynamic>{
           'titulo': resultado.files.single.name,
           'descargado': true,
           'esPdf': esPdf,
@@ -2162,40 +2728,17 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
     final docsFiltrados = _searchQuery.isEmpty
         ? _documentos
         : _documentos
-            .where((d) => (d['titulo'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase()))
-            .toList();
+              .where(
+                (d) => (d['titulo'] ?? '').toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ),
+              )
+              .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Biblioteca',
-          style: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.bold,
-            letterSpacing: -1.2,
-          ),
-        ),
-        toolbarHeight: 80,
-        centerTitle: false,
-        actions: [
-          // Botón para alternar entre Lista y Cuadrícula
-          IconButton(
-            icon: Icon(
-              _vistaCuadricula
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-            ),
-            tooltip: 'Cambiar vista',
-            onPressed: () =>
-                setState(() => _vistaCuadricula = !_vistaCuadricula),
-          ),
-        ],
-      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(
-          bottom: 90.0,
-        ), // ESTO SOLUCIONA LA ORIENTACIÓN Y OVERLAP CON EL MENÚ
+        padding: const EdgeInsets.only(bottom: 90.0),
         child:
             FloatingActionButton(
               shape: const CircleBorder(),
@@ -2271,248 +2814,311 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
               curve: Curves.easeOutBack,
             ),
       ),
-      body: Column(
-        children: [
-          // Barra de Búsqueda Estilo iOS Glassmorphic
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 120.0,
+            floating: true,
+            pinned: true,
+            backgroundColor: Theme.of(
+              context,
+            ).scaffoldBackgroundColor.withOpacity(0.9),
+            flexibleSpace: ClipRRect(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark 
-                        ? Colors.grey.shade800.withOpacity(0.6) 
-                        : Colors.grey.shade300.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(12),
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: FlexibleSpaceBar(
+                  titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+                  title: Text(
+                    'Biblioteca',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -1.2,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
-                  child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    decoration: const InputDecoration(
-                      icon: Icon(Icons.search, color: Colors.grey, size: 20),
-                      hintText: 'Buscar en mi biblioteca...',
-                      border: InputBorder.none,
-                      isDense: true,
+                ),
+              ),
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(
+                  _vistaCuadricula
+                      ? Icons.view_list_rounded
+                      : Icons.grid_view_rounded,
+                  color: Theme.of(context).primaryColor,
+                ),
+                tooltip: 'Cambiar vista',
+                onPressed: () =>
+                    setState(() => _vistaCuadricula = !_vistaCuadricula),
+              ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey.shade800.withOpacity(0.6)
+                          : Colors.grey.shade300.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: const InputDecoration(
+                        icon: Icon(Icons.search, color: Colors.grey, size: 20),
+                        hintText: 'Buscar en mi biblioteca...',
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          Expanded(
-            child: _documentos.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.auto_stories_outlined,
-                          size: 80,
-                          color: Theme.of(context).primaryColor.withOpacity(0.2),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Tu biblioteca está vacía',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).primaryColor.withOpacity(0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Toca el botón + para añadir PDFs o ePubs.',
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColor.withOpacity(0.4),
-                          ),
-                        ),
-                      ],
+          if (_isLoading)
+            SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Theme.of(context).primaryColor,
+                  strokeWidth: 2,
+                ).animate().fade(duration: 400.ms),
+              ),
+            )
+          else if (_documentos.isEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.auto_stories_outlined,
+                      size: 80,
+                      color: Theme.of(context).primaryColor.withOpacity(0.2),
                     ),
-                  ).animate().fade().scale()
-                : _vistaCuadricula
-                    ? _construirVistaCuadricula(docsFiltrados)
-                    : _construirVistaLista(docsFiltrados),
-          ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Tu biblioteca está vacía',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Toca el botón + para añadir PDFs o ePubs.',
+                      style: TextStyle(
+                        color: Theme.of(context).primaryColor.withOpacity(0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fade().scale(),
+            )
+          else if (_vistaCuadricula)
+            _construirSliverCuadricula(docsFiltrados)
+          else
+            _construirSliverLista(docsFiltrados),
         ],
       ),
     );
   }
 
-  // --- VISTA 1: LISTA (Con función de deslizar para borrar) ---
-  Widget _construirVistaLista(List<Map<String, dynamic>> documentos) {
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
+  Widget _construirSliverLista(List<Map<String, dynamic>> documentos) {
+    return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-      itemCount: documentos.length,
-      itemBuilder: (context, index) {
-        final doc = documentos[index];
-        // Encontrar el índice real en _documentos para borrar/editar correctamente
-        final realIndex = _documentos.indexOf(doc);
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final doc = documentos[index];
+          final realIndex = _documentos.indexOf(doc);
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).brightness == Brightness.dark 
-                    ? Colors.white.withOpacity(0.1) 
-                    : Colors.black.withOpacity(0.05),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+          return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white.withOpacity(0.1)
+                          : Colors.black.withOpacity(0.05),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        doc['esPdf'] == true
+                            ? Icons.picture_as_pdf_outlined
+                            : Icons.book_outlined,
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                      ),
+                    ),
+                    title: Text(
+                      doc['titulo'],
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      'Disponible offline',
+                      style: TextStyle(
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                        fontSize: 13,
+                      ),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                    ),
+                    onTap: () => _abrirLector(doc),
+                    onLongPress: () => _mostrarMenuDocumento(realIndex),
+                  ),
                 ),
-              ),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              leading: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  doc['esPdf'] == true
-                      ? Icons.picture_as_pdf_outlined
-                      : Icons.book_outlined,
-                  color: Theme.of(context).primaryColor.withOpacity(0.6),
-                ),
-              ),
-              title: Text(
-                doc['titulo'],
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: Theme.of(context).primaryColor,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                'Disponible offline',
-                style: TextStyle(
-                  color: Theme.of(context).primaryColor.withOpacity(0.6),
-                  fontSize: 13,
-                ),
-              ),
-              trailing: Icon(
-                Icons.chevron_right,
-                color: Theme.of(context).primaryColor.withOpacity(0.3),
-              ),
-              onTap: () => _abrirLector(doc),
-              onLongPress: () => _mostrarMenuDocumento(realIndex),
-            ),
-          ),
-        ).animate().fade(duration: 300.ms).slideX(begin: 0.05, end: 0, delay: (index % 15 * 30).ms);
-      },
+              )
+              .animate()
+              .fade(duration: 300.ms)
+              .slideX(begin: 0.05, end: 0, delay: (index % 15 * 30).ms);
+        }, childCount: documentos.length),
+      ),
     );
   }
 
-  // --- VISTA 2: CUADRÍCULA (Estilo estantería) ---
-  Widget _construirVistaCuadricula(List<Map<String, dynamic>> documentos) {
-    return GridView.builder(
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 120), // Padding extra abajo
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // Dos columnas
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.70, // Proporción estilo libro clásico
-      ),
-      itemCount: documentos.length,
-      itemBuilder: (context, index) {
-        final doc = documentos[index];
-        final realIndex = _documentos.indexOf(doc);
-        
-        return GestureDetector(
-          onTap: () => _abrirLector(doc),
-          onLongPress: () => _mostrarMenuDocumento(realIndex),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: _generarColoresPortada(doc['titulo']),
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Stack(
-              clipBehavior: Clip.antiAlias, // Estilo Apple Books para portadas
-              children: [
-                // Marca de agua de fondo
-                Positioned(
-                  right: -15,
-                  bottom: -15,
-                  child: Icon(
-                    doc['esPdf'] == true ? Icons.picture_as_pdf : Icons.menu_book,
-                    size: 90,
-                    color: Colors.white.withOpacity(0.15),
+  Widget _construirSliverCuadricula(List<Map<String, dynamic>> documentos) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        10,
+        20,
+        120,
+      ), // Padding extra abajo
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.70,
+        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final doc = documentos[index];
+          final realIndex = _documentos.indexOf(doc);
+
+          return GestureDetector(
+                onTap: () => _abrirLector(doc),
+                onLongPress: () => _mostrarMenuDocumento(realIndex),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _generarColoresPortada(doc['titulo']),
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
+                    clipBehavior: Clip.antiAlias,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          doc['esPdf'] == true ? 'PDF' : 'EPUB',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
+                      Positioned(
+                        right: -15,
+                        bottom: -15,
+                        child: Icon(
+                          doc['esPdf'] == true
+                              ? Icons.picture_as_pdf
+                              : Icons.menu_book,
+                          size: 90,
+                          color: Colors.white.withOpacity(0.15),
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        doc['titulo'],
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.white,
-                          height: 1.2,
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                doc['esPdf'] == true ? 'PDF' : 'EPUB',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              doc['titulo'],
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.white,
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ).animate().fade(duration: 400.ms).scale(begin: const Offset(0.9, 0.9), delay: (index % 10 * 40).ms);
-      },
+              )
+              .animate()
+              .fade(duration: 400.ms)
+              .scale(
+                begin: const Offset(0.9, 0.9),
+                delay: (index % 10 * 40).ms,
+              );
+        }, childCount: documentos.length),
+      ),
     );
   }
 
@@ -2522,11 +3128,11 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         context,
         MaterialPageRoute(
           builder: (context) => ReaderScreen(
-            titulo: doc['titulo'],
+            titulo: doc['titulo'] as String,
             fuente: 'Mi Biblioteca',
-            documentPath: doc['path'],
-            isPdf: doc['esPdf'] ?? false,
-            isEpub: doc['esEpub'] ?? false,
+            documentPath: doc['path'] as String?,
+            isPdf: doc['esPdf'] as bool? ?? false,
+            isEpub: doc['esEpub'] as bool? ?? false,
           ),
         ),
       );
@@ -2590,6 +3196,17 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    // Auto-guardado de seguridad al cerrar el modal antes de los 800ms
+    if (_tituloController.text.isNotEmpty ||
+        _contenidoController.text.isNotEmpty) {
+      widget.onSave(
+        _tituloController.text.isNotEmpty
+            ? _tituloController.text
+            : 'Sin título',
+        _contenidoController.text,
+        _selectedColor,
+      );
+    }
     _tituloController.dispose();
     _contenidoController.dispose();
     super.dispose();
@@ -2603,8 +3220,10 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
       ), // Fondo difuminado interactivo
       body: GestureDetector(
         onVerticalDragEnd: (details) {
-          if (details.primaryVelocity! > 300)
-            Navigator.pop(context); // Gesto natural para cerrar
+          if (details.primaryVelocity != null &&
+              details.primaryVelocity! > 300) {
+            Navigator.pop(context);
+          } // Gesto natural para cerrar
         },
         onTap: () {
           HapticFeedback.lightImpact();
