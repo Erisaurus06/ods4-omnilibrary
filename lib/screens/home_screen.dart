@@ -14,7 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 // import 'package:google_sign_in/google_sign_in.dart'; // Comentado por error de importación
 import 'dart:math' as math;
 import 'dart:async';
-import 'package:pdf_text/pdf_text.dart';
+// import 'package:pdf_text/pdf_text.dart';
 import '../services/ai_translation_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,6 +26,74 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _indiceActual = 0; // Controla en qué pestaña estamos
+
+  final LocalAuthentication _auth = LocalAuthentication();
+  bool _isAuthenticated = false;
+  Light? _light;
+  StreamSubscription? _lightSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authenticate();
+    _initLightSensor();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('¡Bienvenido a OmniLibrary! 👋', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Theme.of(context).primaryColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    });
+  }
+
+  Future<void> _authenticate() async {
+    try {
+      final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
+      final bool canAuthenticate = canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
+      
+      if (canAuthenticate) {
+        final bool didAuthenticate = await _auth.authenticate(
+          localizedReason: 'Desbloquea tu biblioteca con tu biometría',
+          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        );
+        setState(() => _isAuthenticated = didAuthenticate);
+      } else {
+        setState(() => _isAuthenticated = true);
+      }
+    } catch (e) {
+      setState(() => _isAuthenticated = true);
+    }
+  }
+
+  void _initLightSensor() {
+    _light = Light();
+    try {
+      _lightSubscription = _light?.lightSensorStream.listen((int luxValue) {
+        final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+        if (luxValue < 15 && !themeProvider.isDarkMode) {
+          themeProvider.toggleTheme(true);
+        } else if (luxValue > 400 && themeProvider.isDarkMode) {
+          themeProvider.toggleTheme(false);
+        }
+        
+        double targetBrightness = (luxValue / 1000).clamp(0.1, 1.0);
+        ScreenBrightness().setScreenBrightness(targetBrightness);
+      });
+    } catch (e) {
+      debugPrint("No se pudo iniciar el sensor de luz: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _lightSubscription?.cancel();
+    ScreenBrightness().resetScreenBrightness();
+    super.dispose();
+  }
 
   // Lista de pantallas actualizada con la nueva sección de Apuntes
   final List<Widget> _pantallas = [
@@ -278,13 +346,14 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
             _EditorApuntePantalla(
               apunteExistente: apunteExistente,
               index: index,
-              onSave: (titulo, contenido, color) {
+              onSave: (titulo, contenido, color, forma) {
                 setState(() {
                   if (apunteExistente != null && index != null) {
                     _misApuntes[index] = {
                       'titulo': titulo,
                       'contenido': contenido,
                       'color': color,
+                      'forma': forma,
                       'fecha':
                           apunteExistente['fecha'] ??
                           DateTime.now().toIso8601String(),
@@ -294,6 +363,7 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       'titulo': titulo,
                       'contenido': contenido,
                       'color': color,
+                      'forma': forma,
                       'fecha': DateTime.now().toIso8601String(),
                     });
                   }
@@ -311,69 +381,142 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
   // Modal para crear Tareas reales
   void _mostrarCreadorDeTareas(BuildContext context) {
     final tareaController = TextEditingController();
+    String fechaSel = 'Próximamente';
+    bool esPrioridad = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: tareaController,
-                autofocus: true,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: '¿Qué necesitas recordar?',
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(fontSize: 18),
-                ),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (tareaController.text.isNotEmpty) {
-                      setState(() {
-                        _misTareas.insert(0, {
-                          'titulo': tareaController.text,
-                          'completada': false,
-                          'fecha': 'Próximamente',
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.grey.shade400,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: tareaController,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: '¿Qué necesitas recordar?',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(fontSize: 18),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(
+                          fechaSel == 'Próximamente' ? 'Hoy' : fechaSel,
+                        ),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor,
+                        onPressed: () {
+                          setModalState(() {
+                            fechaSel = fechaSel == 'Próximamente'
+                                ? 'Hoy'
+                                : 'Próximamente';
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ActionChip(
+                        avatar: Icon(
+                          Icons.flag,
+                          size: 16,
+                          color: esPrioridad ? Colors.orange : Colors.grey,
+                        ),
+                        label: const Text('Prioridad'),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor,
+                        onPressed: () {
+                          setModalState(() {
+                            esPrioridad = !esPrioridad;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (tareaController.text.isNotEmpty) {
+                        setState(() {
+                          _misTareas.insert(0, {
+                            'titulo': tareaController.text,
+                            'completada': false,
+                            'fecha': fechaSel,
+                            'prioridad': esPrioridad.toString(),
+                          });
                         });
-                      });
-                      LocalDbService.guardarTareas(_misTareas);
-                      Navigator.pop(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                        LocalDbService.guardarTareas(_misTareas);
+                        Navigator.pop(context);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Theme.of(
+                        context,
+                      ).scaffoldBackgroundColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Añadir a mi lista',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    'Añadir a mi lista',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -457,6 +600,26 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
           ? _construirMuroDeNotas(isDark)
           : _construirLibretaTareas(isDark),
     );
+  }
+
+  IconData _obtenerIconoForma(String? forma) {
+    switch (forma) {
+      case 'circulo':
+        return Icons.circle;
+      case 'triangulo':
+        return Icons.change_history;
+      case 'rombo':
+        return Icons.diamond;
+      case 'corazon':
+        return Icons.favorite;
+      case 'estrella':
+        return Icons.star;
+      case 'manzana':
+        return Icons.apple;
+      case 'cuadrado':
+      default:
+        return Icons.crop_square;
+    }
   }
 
   Widget _construirMuroDeNotas(bool isDark) {
@@ -558,6 +721,14 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       final esTarea = apunte['tipo'] == 'tarea';
                       final isCompletada = apunte['completada'] == 'true';
 
+                      // Extraemos el color específico de este post-it
+                      final colorHex = apunte['color'] ?? '0xFFFFF59D';
+                      final noteColor = Color(int.parse(colorHex));
+                      // Calculamos una inclinación realista alterna
+                      final double rotacion = (index % 3 == 0)
+                          ? -0.02
+                          : ((index % 2 == 0) ? 0.03 : -0.015);
+
                       return GestureDetector(
                         onTap: () {
                           if (esTarea) {
@@ -578,97 +749,164 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                         onLongPress: () {
                           _confirmarEliminar(realIndex);
                         },
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: isCompletada ? 0.5 : 1.0,
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(
-                                    isDark ? 0.0 : 0.03,
-                                  ),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.1)
-                                    : Colors.black.withOpacity(0.05),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Transform.rotate(
+                          angle: rotacion,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 200),
+                            opacity: isCompletada ? 0.5 : 1.0,
+                            child: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                Row(
-                                  children: [
-                                    if (esTarea) ...[
-                                      Icon(
-                                        isCompletada
-                                            ? Icons.check_circle
-                                            : Icons.radio_button_unchecked,
-                                        size: 18,
-                                        color: isCompletada
-                                            ? Colors.green
-                                            : Theme.of(context).primaryColor,
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: noteColor,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(2),
+                                      topRight: Radius.circular(16),
+                                      bottomLeft: Radius.circular(16),
+                                      bottomRight: Radius.circular(2),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.12),
+                                        blurRadius: 8,
+                                        offset: const Offset(3, 4),
                                       ),
-                                      const SizedBox(width: 8),
                                     ],
-                                    Expanded(
-                                      child: Text(
-                                        apunte['titulo']?.isNotEmpty == true
-                                            ? apunte['titulo']!
-                                            : 'Nueva nota',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: Theme.of(context).primaryColor,
-                                          decoration: isCompletada
-                                              ? TextDecoration.lineThrough
-                                              : null,
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      // Marca de agua gigante con la forma seleccionada
+                                      Positioned(
+                                        right: -25,
+                                        bottom: -25,
+                                        child: Icon(
+                                          _obtenerIconoForma(apunte['forma']),
+                                          size: 110,
+                                          color: Colors.black.withOpacity(0.04),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  apunte.containsKey('fecha')
-                                      ? _formatearFecha(apunte['fecha'])
-                                      : '',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(
-                                      context,
-                                    ).primaryColor.withOpacity(0.5),
-                                    fontWeight: FontWeight.w500,
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              if (esTarea) ...[
+                                                Icon(
+                                                  isCompletada
+                                                      ? Icons.check_circle
+                                                      : Icons
+                                                            .radio_button_unchecked,
+                                                  size: 18,
+                                                  color: isCompletada
+                                                      ? Colors.green
+                                                      : Colors.black87,
+                                                ),
+                                                const SizedBox(width: 8),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  apunte['titulo']
+                                                              ?.isNotEmpty ==
+                                                          true
+                                                      ? apunte['titulo']!
+                                                      : 'Nueva nota',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                    color: Colors
+                                                        .black87, // Letra oscura para alto contraste en pastel
+                                                    decoration: isCompletada
+                                                        ? TextDecoration
+                                                              .lineThrough
+                                                        : null,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            apunte.containsKey('fecha')
+                                                ? _formatearFecha(
+                                                    apunte['fecha'],
+                                                  )
+                                                : '',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black54,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (!esTarea)
+                                            Expanded(
+                                              child: Text(
+                                                apunte['contenido']
+                                                            ?.isNotEmpty ==
+                                                        true
+                                                    ? apunte['contenido']!
+                                                    : 'No hay texto adicional',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  height: 1.4,
+                                                  color: Colors
+                                                      .black87, // Letra oscura para lectura cómoda
+                                                ),
+                                                maxLines: 4,
+                                                overflow: TextOverflow.fade,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                if (!esTarea)
-                                  Expanded(
-                                    child: Text(
-                                      apunte['contenido']?.isNotEmpty == true
-                                          ? apunte['contenido']!
-                                          : 'No hay texto adicional',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        height: 1.4,
-                                        color: Theme.of(
-                                          context,
-                                        ).primaryColor.withOpacity(0.8),
+                                // Efecto de cinta adhesiva semi-transparente en la parte superior
+                                Positioned(
+                                  top: -6,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(
+                                    child: Transform.rotate(
+                                      angle: (index % 2 == 0) ? 0.05 : -0.05,
+                                      child: Container(
+                                        width: 35,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.5),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(
+                                                0.05,
+                                              ),
+                                              blurRadius: 2,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      maxLines: 4,
-                                      overflow: TextOverflow.fade,
                                     ),
                                   ),
+                                ),
+                                // Icono pequeño de la forma estilo "Chincheta/Pin"
+                                Positioned(
+                                  top: -15,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(
+                                    child: Icon(
+                                      _obtenerIconoForma(apunte['forma']),
+                                      size: 20,
+                                      color: Colors.black.withOpacity(0.5),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -808,81 +1046,114 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       final isCompletada =
                           tarea['completada'] == true ||
                           tarea['completada'] == 'true';
+                      final isPrioridad = tarea['prioridad'] == 'true';
+                      final fecha = tarea['fecha'] ?? 'Próximamente';
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: isCompletada ? 0.5 : 1.0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(
-                                    isDark ? 0.0 : 0.03,
-                                  ),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.1)
-                                    : Colors.black.withOpacity(0.05),
-                                width: 1,
-                              ),
+                      return Column(
+                        children: [
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 4,
                             ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _misTareas[realIndex]['completada'] =
+                                    !isCompletada;
+                              });
+                              LocalDbService.guardarTareas(_misTareas);
+                            },
+                            leading: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isCompletada
+                                      ? Colors.grey.shade400
+                                      : Theme.of(context).primaryColor,
+                                  width: 1.5,
+                                ),
+                                color: isCompletada
+                                    ? Colors.grey.shade300
+                                    : Colors.transparent,
                               ),
-                              onTap: () {
-                                HapticFeedback.lightImpact();
+                              child: isCompletada
+                                  ? Icon(
+                                      Icons.check,
+                                      size: 18,
+                                      color: Colors.grey.shade600,
+                                    )
+                                  : null,
+                            ),
+                            title: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tarea['titulo'] ?? 'Nueva tarea',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 17,
+                                    color: isCompletada
+                                        ? Colors.grey
+                                        : Theme.of(context).primaryColor,
+                                    decoration: isCompletada
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                                ),
+                                if (!isCompletada &&
+                                    (fecha != 'Próximamente' || isPrioridad))
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Row(
+                                      children: [
+                                        if (fecha != 'Próximamente')
+                                          Text(
+                                            fecha,
+                                            style: const TextStyle(
+                                              color: Colors.redAccent,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        if (fecha != 'Próximamente' &&
+                                            isPrioridad)
+                                          const SizedBox(width: 8),
+                                        if (isPrioridad)
+                                          const Icon(
+                                            Icons.flag,
+                                            color: Colors.orange,
+                                            size: 14,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: () {
+                                HapticFeedback.mediumImpact();
                                 setState(() {
-                                  _misTareas[realIndex]['completada'] =
-                                      !isCompletada;
+                                  _misTareas.removeAt(realIndex);
                                 });
                                 LocalDbService.guardarTareas(_misTareas);
                               },
-                              leading: Icon(
-                                isCompletada
-                                    ? Icons.check_circle
-                                    : Icons.radio_button_unchecked,
-                                color: isCompletada
-                                    ? Colors.green
-                                    : Theme.of(context).primaryColor,
-                                size: 26,
-                              ),
-                              title: Text(
-                                tarea['titulo'] ?? 'Nueva tarea',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Theme.of(context).primaryColor,
-                                  decoration: isCompletada
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                ),
-                                onPressed: () {
-                                  HapticFeedback.mediumImpact();
-                                  setState(() {
-                                    _misTareas.removeAt(realIndex);
-                                  });
-                                  LocalDbService.guardarTareas(_misTareas);
-                                },
-                              ),
                             ),
                           ),
-                        ),
+                          Divider(
+                            height: 1,
+                            indent: 60,
+                            color: Theme.of(
+                              context,
+                            ).dividerColor.withOpacity(0.5),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -1999,6 +2270,8 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
                       Text(
                         SupabaseService.client.auth.currentUser?.email ??
                             'Usuario Invitado',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 14,
                           color: Theme.of(
@@ -2106,10 +2379,10 @@ class _SeccionAjustesState extends State<_SeccionAjustes> {
           _buildSectionHeader('ACERCA DE'),
           _buildSettingsCard(context, [
             _ActionTile(
-              titulo: 'Versión del Sistema',
+              titulo: 'Versión de la App',
               icono: Icons.info_outline_rounded,
               colorIcono: Colors.blueGrey,
-              trailingText: Platform.operatingSystemVersion.split(' ').first,
+              trailingText: '1.0.0 (Estable)',
               onTap: () {},
             ),
             _buildDivider(context),
@@ -2361,9 +2634,13 @@ class _ActionTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (trailingText != null)
-            Text(
-              trailingText!,
-              style: const TextStyle(color: Colors.grey, fontSize: 15),
+            Flexible(
+              child: Text(
+                trailingText!,
+                style: const TextStyle(color: Colors.grey, fontSize: 15),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           if (trailingText != null) const SizedBox(width: 4),
           Icon(Icons.chevron_right, color: Colors.grey.withOpacity(0.5)),
@@ -2527,6 +2804,15 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
       ),
     );
 
+    // --- Desactivado temporalmente por incompatibilidad en Android ---
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Extracción de PDF desactivada temporalmente.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    /*
     try {
       // Extraemos el texto de forma asíncrona usando la librería nativa
       PDFDoc doc = await PDFDoc.fromPath(path);
@@ -2591,6 +2877,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         );
       }
     }
+    */
   }
 
   // --- NUEVO: Lógica para Generar un Resumen Total del PDF ---
@@ -2613,6 +2900,15 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
       ),
     );
 
+    // --- Desactivado temporalmente por incompatibilidad en Android ---
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Extracción de PDF desactivada temporalmente.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    /*
     try {
       PDFDoc doc = await PDFDoc.fromPath(path);
       String text = await doc.text;
@@ -2672,6 +2968,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
         );
       }
     }
+    */
   }
 
   // Método para eliminar un documento
@@ -3144,7 +3441,7 @@ class _SeccionBibliotecaState extends State<_SeccionBiblioteca> {
 class _EditorApuntePantalla extends StatefulWidget {
   final Map<String, String>? apunteExistente;
   final int? index;
-  final Function(String, String, String) onSave;
+  final Function(String, String, String, String) onSave;
 
   const _EditorApuntePantalla({
     this.apunteExistente,
@@ -3160,7 +3457,34 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
   late TextEditingController _tituloController;
   late TextEditingController _contenidoController;
   late String _selectedColor;
-  Timer? _debounceTimer;
+  late String _selectedForma;
+
+  final List<String> _colores = [
+    '0xFFFFFFFF', // Blanco puro
+    '0xFFF5F5F5', // Gris súper claro
+    '0xFFFFF9C4', // Crema
+    '0xFFD7CCC8', // Café claro
+    '0xFFFFF59D', // Amarillo
+    '0xFFFFCCBC', // Durazno
+    '0xFFFFAB91', // Naranja
+    '0xFFF8BBD0', // Rosa
+    '0xFFE1BEE7', // Morado claro
+    '0xFFB39DDB', // Morado
+    '0xFFC5CAE9', // Lila
+    '0xFF90CAF9', // Azul
+    '0xFFB2EBF2', // Turquesa
+    '0xFFA5D6A7', // Verde
+  ];
+
+  final Map<String, IconData> _formas = {
+    'cuadrado': Icons.crop_square,
+    'circulo': Icons.circle_outlined,
+    'triangulo': Icons.change_history,
+    'rombo': Icons.diamond_outlined,
+    'corazon': Icons.favorite_border,
+    'estrella': Icons.star_border,
+    'manzana': Icons.apple,
+  };
 
   @override
   void initState() {
@@ -3172,41 +3496,31 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
       text: widget.apunteExistente?['contenido'] ?? '',
     );
     _selectedColor = widget.apunteExistente?['color'] ?? '0xFF90CAF9';
-
-    _tituloController.addListener(_onTextChanged);
-    _contenidoController.addListener(_onTextChanged);
+    _selectedForma = widget.apunteExistente?['forma'] ?? 'cuadrado';
   }
 
-  void _onTextChanged() {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
-      if (_tituloController.text.isNotEmpty ||
-          _contenidoController.text.isNotEmpty) {
-        widget.onSave(
-          _tituloController.text.isNotEmpty
-              ? _tituloController.text
-              : 'Sin título',
-          _contenidoController.text,
-          _selectedColor,
-        );
-      }
-    });
+  // Método para insertar formatos en el texto
+  void _insertFormat(String prefix, String suffix) {
+    final text = _contenidoController.text;
+    final selection = _contenidoController.selection;
+    if (selection.start >= 0 && selection.end >= 0) {
+      final selectedText = selection.textInside(text);
+      final newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        '$prefix$selectedText$suffix',
+      );
+      _contenidoController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(
+          offset: selection.start + prefix.length + selectedText.length,
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
-    // Auto-guardado de seguridad al cerrar el modal antes de los 800ms
-    if (_tituloController.text.isNotEmpty ||
-        _contenidoController.text.isNotEmpty) {
-      widget.onSave(
-        _tituloController.text.isNotEmpty
-            ? _tituloController.text
-            : 'Sin título',
-        _contenidoController.text,
-        _selectedColor,
-      );
-    }
     _tituloController.dispose();
     _contenidoController.dispose();
     super.dispose();
@@ -3237,12 +3551,17 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
               child: GestureDetector(
                 onTap: () {}, // Previene el cierre si toca dentro de la nota
                 child: Container(
-                  width: MediaQuery.of(context).size.width * 0.85,
-                  height: MediaQuery.of(context).size.height * 0.65,
-                  padding: const EdgeInsets.all(24),
+                  width: MediaQuery.of(context).size.width * 0.95,
+                  height: MediaQuery.of(context).size.height * 0.85,
                   decoration: BoxDecoration(
-                    color: Color(int.parse(_selectedColor)),
+                    color: Theme.of(
+                      context,
+                    ).scaffoldBackgroundColor, // Apariencia de documento
                     borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Color(int.parse(_selectedColor)),
+                      width: 2,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
@@ -3253,36 +3572,171 @@ class _EditorApuntePantallaState extends State<_EditorApuntePantalla> {
                   ),
                   child: Column(
                     children: [
-                      TextField(
-                        controller: _tituloController,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                      // BARRA DE HERRAMIENTAS (RICH TEXT)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                        decoration: const InputDecoration(
-                          hintText: 'Título...',
-                          border: InputBorder.none,
+                        decoration: BoxDecoration(
+                          color: Color(
+                            int.parse(_selectedColor),
+                          ).withOpacity(0.15),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(22),
+                          ),
                         ),
-                        textCapitalization: TextCapitalization.sentences,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.format_bold),
+                                onPressed: () => _insertFormat('**', '**'),
+                                tooltip: 'Negrita',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_italic),
+                                onPressed: () => _insertFormat('_', '_'),
+                                tooltip: 'Cursiva',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.strikethrough_s),
+                                onPressed: () => _insertFormat('~~', '~~'),
+                                tooltip: 'Tachado',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.title),
+                                onPressed: () => _insertFormat('# ', ''),
+                                tooltip: 'Título',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_quote),
+                                onPressed: () => _insertFormat('> ', ''),
+                                tooltip: 'Cita',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_list_bulleted),
+                                onPressed: () => _insertFormat('- ', ''),
+                                tooltip: 'Viñeta',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.format_list_numbered),
+                                onPressed: () => _insertFormat('1. ', ''),
+                                tooltip: 'Lista numerada',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.check_box_outline_blank),
+                                onPressed: () => _insertFormat('- [ ] ', ''),
+                                tooltip: 'Casilla (To-Do)',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.code),
+                                onPressed: () => _insertFormat('`', '`'),
+                                tooltip: 'Código',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.horizontal_rule),
+                                onPressed: () => _insertFormat('\n---\n', ''),
+                                tooltip: 'Separador',
+                              ),
+                              Container(
+                                height: 24,
+                                width: 1,
+                                color: Colors.grey,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                              ...[
+                                    '0xFFFFF59D',
+                                    '0xFFB39DDB',
+                                    '0xFFA5D6A7',
+                                    '0xFF90CAF9',
+                                    '0xFFFFAB91',
+                                  ]
+                                  .map(
+                                    (c) => GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _selectedColor = c),
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          color: Color(int.parse(c)),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: _selectedColor == c
+                                                ? Theme.of(context).primaryColor
+                                                : Colors.transparent,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ],
+                          ),
+                        ),
                       ),
-                      const Divider(color: Colors.black12),
+                      // CONTENIDO
                       Expanded(
-                        child: TextField(
-                          controller: _contenidoController,
-                          maxLines: null,
-                          expands: true,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                            color: Colors.black87,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            children: [
+                              TextField(
+                                controller: _tituloController,
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Título del documento...',
+                                  hintStyle: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).primaryColor.withOpacity(0.3),
+                                  ),
+                                  border: InputBorder.none,
+                                ),
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                              ),
+                              Divider(color: Theme.of(context).dividerColor),
+                              Expanded(
+                                child: TextField(
+                                  controller: _contenidoController,
+                                  maxLines: null,
+                                  expands: true,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    height: 1.6,
+                                    color: Theme.of(
+                                      context,
+                                    ).primaryColor.withOpacity(0.9),
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        'Comienza a escribir tu apunte...',
+                                    hintStyle: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).primaryColor.withOpacity(0.4),
+                                    ),
+                                    border: InputBorder.none,
+                                  ),
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                ),
+                              ),
+                            ],
                           ),
-                          decoration: const InputDecoration(
-                            hintText:
-                                'Escribe tu nota (se guarda automáticamente)...',
-                            border: InputBorder.none,
-                          ),
-                          textCapitalization: TextCapitalization.sentences,
                         ),
                       ),
                     ],

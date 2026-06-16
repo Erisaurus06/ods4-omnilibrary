@@ -21,7 +21,6 @@ Future<void> main() async {
   // 2. Cargamos configuración primero
   await dotenv.load(fileName: ".env");
 
-  // 3. Inicializamos servicios pesados (Base de datos local + Nube)
   await LocalDbService.init();
   await SupabaseService.inicializar();
 
@@ -49,7 +48,7 @@ class OmniLibraryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Escuchamos los cambios del Modo Oscuro
+
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MaterialApp(
@@ -58,10 +57,10 @@ class OmniLibraryApp extends StatelessWidget {
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       themeAnimationDuration: const Duration(
         milliseconds: 600,
-      ), // Transición súper suave entre Claro/Oscuro
-      themeAnimationCurve: Curves.easeInOutCubic, // Curva de animación premium
+      ), 
+      themeAnimationCurve: Curves.easeInOutCubic, 
       theme: ThemeData(
-        fontFamily: '.SF Pro Text', // Fuerza San Francisco en iOS/macOS
+        fontFamily: '.SF Pro Text',
         brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(
           0xFFFAFAFA,
@@ -83,14 +82,13 @@ class OmniLibraryApp extends StatelessWidget {
         fontFamily: '.SF Pro Text',
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(
-          0xFF000000, // Negro puro típico de iOS para pantallas OLED
+          0xFF000000, 
         ),
         primaryColor: Colors.white,
         cardColor: const Color(
           0xFF1C1C1E,
-        ), // Color de las tarjetas en iOS Dark Mode
+        ), 
         dividerColor: Colors.grey[800],
-        // Esto asegura que la base se ponga oscura automáticamente
         colorScheme: const ColorScheme.dark(surface: Color(0xFF1C1C1E)),
         appBarTheme: const AppBarTheme(
           centerTitle: true,

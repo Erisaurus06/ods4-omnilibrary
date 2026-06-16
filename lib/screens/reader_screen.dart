@@ -52,7 +52,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // Nuevas variables para herramientas y temporizador
   Timer? _readingTimer;
   int _timerMinutes = 0;
-  Color _highlightColor = Colors.yellow;
+  Color _highlightColor = Colors.transparent;
   bool _drawMode = false;
   bool _noteMode = false;
 
@@ -334,6 +334,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
         // Sobrescribimos el archivo local
         final File file = File(widget.documentPath!);
         await file.writeAsBytes(documentBytes);
+
+        // Advertencia si el modo de dibujo estaba activo, para gestionar expectativas.
+        if (_drawMode && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Nota: Los dibujos a mano alzada aún no se guardan en el PDF.',
+              ),
+              backgroundColor: Colors.orangeAccent,
+            ),
+          );
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1513,7 +1525,84 @@ class _ReaderScreenState extends State<ReaderScreen> {
       );
     }
 
-    return EpubView(controller: _epubController!);
+    // 1. Verificamos si hay alguna herramienta de dibujo/resaltado activa
+    final bool modoAnotacionActivo =
+        _drawMode || (_highlightColor != Colors.transparent && !_noteMode);
+
+    // 2. Inyectamos los temas, colores y tipografía al visor de ePub
+    final Widget epubWidget = Container(
+      color: _backgroundColor,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 24.0,
+        vertical: 10.0,
+      ), // Formato y márgenes de libro
+      child: DefaultTextStyle(
+        style: TextStyle(
+          color: _textColor.withOpacity(0.85),
+          fontSize: _fontSize,
+          fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+          height: 1.7, // Interlineado premium tipo libro
+          letterSpacing: 0.2,
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            textTheme: TextTheme(
+              bodyMedium: TextStyle(
+                color: _textColor.withOpacity(0.85),
+                fontSize: _fontSize,
+                fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+                height: 1.7,
+              ),
+            ),
+          ),
+          child: EpubView(controller: _epubController!),
+        ),
+      ),
+    );
+
+    // 3. Renderizamos el ePub con la misma capa de interactividad del PDF
+    return Stack(
+      children: [
+        epubWidget,
+        // ¡Habilitamos la capa de dibujo y resaltado también para ePubs!
+        if (modoAnotacionActivo)
+          Positioned.fill(
+            child: GestureDetector(
+              onPanStart: (details) {
+                _trazoActual = _Trazo(
+                  puntos: [details.localPosition],
+                  color: _drawMode
+                      ? Theme.of(context).primaryColor
+                      : _highlightColor,
+                  esResaltador: !_drawMode,
+                );
+                _trazos.add(_trazoActual!);
+                _trazosUpdater.value++;
+              },
+              onPanUpdate: (details) {
+                if (_trazoActual != null) {
+                  _trazoActual!.puntos.add(details.localPosition);
+                  _trazosUpdater.value++; // Dibuja fluido a 60/120fps
+                }
+              },
+              onPanEnd: (details) {
+                _trazoActual = null;
+              },
+              child: RepaintBoundary(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _trazosUpdater,
+                  builder: (context, _, __) {
+                    return CustomPaint(
+                      painter: _AnotacionPainter(_trazos),
+                      size: Size.infinite,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 

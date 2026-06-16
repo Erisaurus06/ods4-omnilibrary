@@ -36,17 +36,17 @@ dependencies:
     sdk: flutter
   flutter_animate: ^4.5.2
   flutter_dotenv: ^6.0.1
-  flutter_native_splash: ^2.4.0
   flutter_tts: ^4.2.5
   google_sign_in: ^6.2.2
   googleapis: any
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-
+  local_auth: ^2.1.8
+  light: ^2.0.1
+  screen_brightness: ^0.2.1 
   # Nota cómo http y webfeed_revised están al mismo nivel que flutter
   http: ^1.2.0
   path_provider: any
-  pdf_text: ^0.5.0
   provider: ^6.1.1
   screen_brightness: any
   shared_preferences: ^2.2.2
