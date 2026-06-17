@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'reader_screen.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/local_db_service.dart';
-import 'dart:io';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../services/supabase_service.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-// import 'package:google_sign_in/google_sign_in.dart'; // Comentado por error de importación
-import 'dart:math' as math;
 import 'dart:async';
-// import 'package:pdf_text/pdf_text.dart';
-import '../services/ai_translation_service.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:light/light.dart';
+import 'package:local_auth/local_auth.dart';
+
+import 'apuntes_tab.dart';
+import 'tareas_tab.dart';
+import 'flashcards_tab.dart';
+import 'biblioteca_tab.dart';
+import 'ajustes_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,9 +38,16 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          content: const Text(
+            '¡Bienvenido a OmniLibrary! 👋',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: const Text('¡Bienvenido a OmniLibrary! 👋', style: TextStyle(fontWeight: FontWeight.bold)),
           backgroundColor: Theme.of(context).primaryColor,
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
@@ -53,11 +57,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _authenticate() async {
     try {
       final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
+      final bool canAuthenticate =
+          canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
+
       final bool canAuthenticate = canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
       
       if (canAuthenticate) {
         final bool didAuthenticate = await _auth.authenticate(
           localizedReason: 'Desbloquea tu biblioteca con tu biometría',
+          options: const AuthenticationOptions(
+            biometricOnly: true,
+            stickyAuth: true,
+          ),
           options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
         );
         setState(() => _isAuthenticated = didAuthenticate);
@@ -73,12 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _light = Light();
     try {
       _lightSubscription = _light?.lightSensorStream.listen((int luxValue) {
+        final themeProvider = Provider.of<ThemeProvider>(
+          context,
+          listen: false,
+        );
         final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
         if (luxValue < 15 && !themeProvider.isDarkMode) {
           themeProvider.toggleTheme(true);
         } else if (luxValue > 400 && themeProvider.isDarkMode) {
           themeProvider.toggleTheme(false);
         }
+
         
         double targetBrightness = (luxValue / 1000).clamp(0.1, 1.0);
         ScreenBrightness().setScreenBrightness(targetBrightness);
@@ -95,12 +111,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // Lista de pantallas actualizada con la nueva sección de Apuntes
   final List<Widget> _pantallas = [
-    const _SeccionApuntes(),
-    const _SeccionFlashcards(),
-    const _SeccionBiblioteca(),
-    const _SeccionAjustes(),
+    const SeccionApuntes(),
+    const SeccionTareas(),
+    const SeccionFlashcards(),
+    const SeccionBiblioteca(),
+    const SeccionAjustes(),
   ];
 
   @override
@@ -168,7 +184,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       label: 'Apuntes',
                     ),
-                    // 2. Item de "Flashcards"
+                    // 2. Item de "Tareas" (Nuevo Tab Independiente)
+                    BottomNavigationBarItem(
+                      icon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.check_box_outlined),
+                      ),
+                      activeIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Icon(Icons.check_box),
+                      ),
+                      label: 'Tareas',
+                    ),
+                    // 3. Item de "Flashcards"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
@@ -180,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       label: 'Flashcards',
                     ),
-                    // 3. Item de "Biblioteca"
+                    // 4. Item de "Biblioteca"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
@@ -192,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       label: 'Biblioteca',
                     ),
-                    // 3. Item de "Ajustes" (se mantiene)
+                    // 5. Item de "Ajustes"
                     BottomNavigationBarItem(
                       icon: Padding(
                         padding: EdgeInsets.only(bottom: 4),
@@ -290,10 +318,17 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
       LocalDbService.guardarNotas(notasRaw);
     }
 
+    // Mapeamos los datos a colecciones puras de Dart para aislar por completo a Hive
+    final notasSafe = notasRaw.map((e) => Map<String, String>.from(e)).toList();
+    final tareasSafe = tareasRaw
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final tareasSafe = tareasRaw.map((e) => Map<String, dynamic>.from(e)).toList();
+
     // 3. Offload a un Isolate usando 'compute' para mapear y procesar sin afectar los FPS
     final procesado = await compute(_procesarNotasEnFondo, <String, dynamic>{
-      'notas': notasRaw,
-      'tareas': tareasRaw,
+      'notas': notasSafe,
+      'tareas': tareasSafe,
     });
 
     if (mounted) {
@@ -383,143 +418,144 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
     final tareaController = TextEditingController();
     String fechaSel = 'Próximamente';
     bool esPrioridad = false;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return ClipRRect(
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.grey.shade400,
-                          width: 2,
-                        ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).viewInsets.bottom,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.grey[900]!.withOpacity(0.8)
+                          : Colors.white.withOpacity(0.8),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextField(
-                        controller: tareaController,
-                        autofocus: true,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(
-                          hintText: '¿Qué necesitas recordar?',
-                          border: InputBorder.none,
-                          hintStyle: TextStyle(fontSize: 18),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // --- Área de texto principal ---
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey[800] : Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: tareaController,
+                                  autofocus: true,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  decoration: const InputDecoration(
+                                    hintText: '¿Qué necesitas recordar?',
+                                    border: InputBorder.none,
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  // Actualiza la UI para habilitar/deshabilitar el botón de envío
+                                  onChanged: (value) => setModalState(() {}),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.arrow_upward_rounded),
+                                color: Theme.of(context).primaryColor,
+                                disabledColor: Colors.grey,
+                                onPressed: tareaController.text.trim().isEmpty
+                                    ? null // Deshabilitado si no hay texto
+                                    : () {
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _misTareas.insert(0, {
+                                            'titulo': tareaController.text
+                                                .trim(),
+                                            'titulo':
+                                                tareaController.text.trim(),
+                                            'completada': false,
+                                            'fecha': fechaSel,
+                                            'prioridad': esPrioridad.toString(),
+                                            'prioridad':
+                                                esPrioridad.toString(),
+                                          });
+                                        });
+                                        LocalDbService.guardarTareas(
+                                          _misTareas,
+                                        );
+                                        Navigator.pop(context);
+                                      },
+                              ),
+                              )
+                            ],
+                          ),
                         ),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 12),
+                        // --- Iconos de acción ---
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                HapticFeedback.lightImpact();
+                                setModalState(() {
+                                  fechaSel = fechaSel == 'Próximamente'
+                                      ? 'Hoy'
+                                      : 'Próximamente';
+                                });
+                              },
+                              icon: Icon(
+                                Icons.calendar_today_outlined,
+                                color: fechaSel == 'Hoy'
+                                    ? Theme.of(context).primaryColor
+                                    : Colors.grey,
+                              ),
+                              tooltip: 'Marcar para hoy',
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                HapticFeedback.lightImpact();
+                                setModalState(() => esPrioridad = !esPrioridad);
+                              },
+                              icon: Icon(
+                                esPrioridad ? Icons.flag : Icons.flag_outlined,
+                                color: esPrioridad
+                                    ? Colors.orange
+                                    : Colors.grey,
+                                color:
+                                    esPrioridad ? Colors.orange : Colors.grey,
+                              ),
+                              tooltip: 'Marcar como prioridad',
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.calendar_today, size: 16),
-                        label: Text(
-                          fechaSel == 'Próximamente' ? 'Hoy' : fechaSel,
-                        ),
-                        backgroundColor: Theme.of(
-                          context,
-                        ).scaffoldBackgroundColor,
-                        onPressed: () {
-                          setModalState(() {
-                            fechaSel = fechaSel == 'Próximamente'
-                                ? 'Hoy'
-                                : 'Próximamente';
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      ActionChip(
-                        avatar: Icon(
-                          Icons.flag,
-                          size: 16,
-                          color: esPrioridad ? Colors.orange : Colors.grey,
-                        ),
-                        label: const Text('Prioridad'),
-                        backgroundColor: Theme.of(
-                          context,
-                        ).scaffoldBackgroundColor,
-                        onPressed: () {
-                          setModalState(() {
-                            esPrioridad = !esPrioridad;
-                          });
-                        },
-                      ),
-                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (tareaController.text.isNotEmpty) {
-                        setState(() {
-                          _misTareas.insert(0, {
-                            'titulo': tareaController.text,
-                            'completada': false,
-                            'fecha': fechaSel,
-                            'prioridad': esPrioridad.toString(),
-                          });
-                        });
-                        LocalDbService.guardarTareas(_misTareas);
-                        Navigator.pop(context);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Theme.of(
-                        context,
-                      ).scaffoldBackgroundColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Añadir a mi lista',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -748,6 +784,8 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                         },
                         onLongPress: () {
                           _confirmarEliminar(realIndex);
+                          HapticFeedback.mediumImpact();
+                          _mostrarMenuContextualNota(realIndex);
                         },
                         child: Transform.rotate(
                           angle: rotacion,
@@ -766,6 +804,23 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                                       topRight: Radius.circular(16),
                                       bottomLeft: Radius.circular(16),
                                       bottomRight: Radius.circular(2),
+                        child: Hero(
+                          tag: 'apunte_$realIndex',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: isCompletada ? 0.5 : 1.0,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: noteColor,
+                                  borderRadius: BorderRadius.circular(16), // Perfecto Apple Notes
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
                                     boxShadow: [
                                       BoxShadow(
@@ -791,6 +846,11 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                           Row(
                                             children: [
                                               if (esTarea) ...[
@@ -923,6 +983,11 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
   void _confirmarEliminar(int index) {
     HapticFeedback.mediumImpact();
     showDialog(
+  void _mostrarMenuContextualNota(int index) {
+    final apunte = _misApuntes[index];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(context).cardColor,
@@ -959,11 +1024,88 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
               style: TextStyle(
                 color: Colors.redAccent,
                 fontWeight: FontWeight.bold,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: isDark
+                  ? Colors.grey.shade900.withOpacity(0.8)
+                  : Colors.white.withOpacity(0.8),
+              padding: const EdgeInsets.only(bottom: 32, top: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: Icon(Icons.edit_outlined, color: Theme.of(context).primaryColor),
+                    title: Text('Editar apunte', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w500)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _mostrarCreadorDeApuntes(
+                        context,
+                        apunteExistente: apunte,
+                        index: index,
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.color_lens_outlined, color: Theme.of(context).primaryColor),
+                    title: Text('Cambiar color', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w500)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _cambiarColorRapido(index);
+                    },
+                  ),
+                  Divider(color: Colors.grey.withOpacity(0.2)),
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    title: const Text('Eliminar', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.pop(context);
+                      setState(() {
+                        _misApuntes.removeAt(index);
+                      });
+                      LocalDbService.guardarNotas(_misApuntes);
+                    },
+                  ),
+                ],
               ),
             ),
           ),
         ],
       ),
+        );
+      },
+    );
+  }
+
+  void _cambiarColorRapido(int index) {
+    final colores = [
+      '0xFFFFF59D',
+      '0xFFB39DDB',
+      '0xFFA5D6A7',
+      '0xFF90CAF9',
+      '0xFFFFAB91',
+    ];
+    final currentColor = _misApuntes[index]['color'] ?? '0xFFFFF59D';
+    int nextIdx = (colores.indexOf(currentColor) + 1) % colores.length;
+    setState(() {
+      _misApuntes[index]['color'] = colores[nextIdx];
+    });
+    LocalDbService.guardarNotas(_misApuntes);
+  }
     );
   }
 
@@ -1034,126 +1176,139 @@ class _SeccionApuntesState extends State<_SeccionApuntes> {
                       ],
                     ),
                   )
-                : ListView.builder(
+                : ListView.separated(
                     physics: const BouncingScrollPhysics(
                       parent: AlwaysScrollableScrollPhysics(),
                     ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                    // Quitamos el padding horizontal del ListView para que el Swipe to Delete (fondo rojo) toque los bordes laterales de la pantalla
+                    padding: const EdgeInsets.fromLTRB(0, 20, 0, 120),
                     itemCount: tareasFiltradas.length,
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      indent: 64, // Alineado exactamente donde empieza el texto
+                      color: Theme.of(
+                        context,
+                      ).dividerColor.withOpacity(0.2), // Línea fina y sutil
+                      color: Theme.of(context).dividerColor.withOpacity(0.2), // Línea fina y sutil
+                      thickness: 0.5,
+                    ),
                     itemBuilder: (context, index) {
                       final tarea = tareasFiltradas[index];
                       final realIndex = _misTareas.indexOf(tarea);
-                      final isCompletada =
-                          tarea['completada'] == true ||
-                          tarea['completada'] == 'true';
+                      final bool isCompletada = tarea['completada'] == true;
                       final isPrioridad = tarea['prioridad'] == 'true';
                       final fecha = tarea['fecha'] ?? 'Próximamente';
 
-                      return Column(
-                        children: [
-                          ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 4,
-                            ),
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              setState(() {
-                                _misTareas[realIndex]['completada'] =
-                                    !isCompletada;
-                              });
-                              LocalDbService.guardarTareas(_misTareas);
-                            },
-                            leading: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isCompletada
-                                      ? Colors.grey.shade400
-                                      : Theme.of(context).primaryColor,
-                                  width: 1.5,
-                                ),
+                      return Dismissible(
+                        // Clave única basada en la posición y el contenido
+                        key: Key('tarea_${realIndex}_${tarea['titulo']}'),
+                        direction: DismissDirection
+                            .endToStart, // Swipe de derecha a izquierda
+                        direction: DismissDirection.endToStart, // Swipe de derecha a izquierda
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 24),
+                          color: Colors.redAccent,
+                          child: const Icon(
+                            Icons.delete,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                        onDismissed: (direction) {
+                          HapticFeedback.mediumImpact();
+                          setState(() {
+                            _misTareas.removeAt(realIndex);
+                          });
+                          LocalDbService.guardarTareas(_misTareas);
+                        },
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            setState(() {
+                              _misTareas[realIndex]['completada'] =
+                                  !isCompletada;
+                            });
+                            LocalDbService.guardarTareas(_misTareas);
+                          },
+                          leading: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOutCubic,
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
                                 color: isCompletada
-                                    ? Colors.grey.shade300
-                                    : Colors.transparent,
+                                    ? Theme.of(context).primaryColor
+                                    : Colors.grey.shade400,
+                                width: 1.5,
                               ),
-                              child: isCompletada
-                                  ? Icon(
-                                      Icons.check,
-                                      size: 18,
-                                      color: Colors.grey.shade600,
-                                    )
-                                  : null,
+                              color: isCompletada
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.transparent,
                             ),
-                            title: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  tarea['titulo'] ?? 'Nueva tarea',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 17,
-                                    color: isCompletada
-                                        ? Colors.grey
-                                        : Theme.of(context).primaryColor,
-                                    decoration: isCompletada
-                                        ? TextDecoration.lineThrough
-                                        : null,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: isCompletada ? 1.0 : 0.0,
+                              child: const Icon(
+                                Icons.check,
+                                size: 18,
+                                color: Colors.white, // Blanco nativo
+                              ),
+                            ),
+                          ),
+                          title: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AnimatedDefaultTextStyle(
+                                duration: const Duration(milliseconds: 300),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 17,
+                                  color: isCompletada
+                                      ? Colors.grey
+                                      : Theme.of(context).primaryColor,
+                                  decoration: isCompletada
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                ),
+                                child: Text(tarea['titulo'] ?? 'Nueva tarea'),
+                              ),
+                              if (!isCompletada &&
+                                  (fecha != 'Próximamente' || isPrioridad))
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Row(
+                                    children: [
+                                      if (fecha != 'Próximamente')
+                                        Text(
+                                          fecha,
+                                          style: const TextStyle(
+                                            color: Colors.redAccent,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      if (fecha != 'Próximamente' &&
+                                          isPrioridad)
+                                        const SizedBox(width: 8),
+                                      if (isPrioridad)
+                                        const Icon(
+                                          Icons.flag,
+                                          color: Colors.orange,
+                                          size: 14,
+                                        ),
+                                    ],
                                   ),
                                 ),
-                                if (!isCompletada &&
-                                    (fecha != 'Próximamente' || isPrioridad))
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4.0),
-                                    child: Row(
-                                      children: [
-                                        if (fecha != 'Próximamente')
-                                          Text(
-                                            fecha,
-                                            style: const TextStyle(
-                                              color: Colors.redAccent,
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        if (fecha != 'Próximamente' &&
-                                            isPrioridad)
-                                          const SizedBox(width: 8),
-                                        if (isPrioridad)
-                                          const Icon(
-                                            Icons.flag,
-                                            color: Colors.orange,
-                                            size: 14,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.redAccent,
-                              ),
-                              onPressed: () {
-                                HapticFeedback.mediumImpact();
-                                setState(() {
-                                  _misTareas.removeAt(realIndex);
-                                });
-                                LocalDbService.guardarTareas(_misTareas);
-                              },
-                            ),
+                            ],
                           ),
-                          Divider(
-                            height: 1,
-                            indent: 60,
-                            color: Theme.of(
-                              context,
-                            ).dividerColor.withOpacity(0.5),
-                          ),
-                        ],
+                        ),
                       );
                     },
                   ),
