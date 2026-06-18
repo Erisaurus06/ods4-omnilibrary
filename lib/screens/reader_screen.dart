@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:epub_view/epub_view.dart';
@@ -104,9 +106,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.didChangeDependencies();
     if (!_temaInicializado) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
-      _backgroundColor = isDark
-          ? const Color(0xFF121212)
-          : const Color(0xFFFAFAFA);
+      _backgroundColor =
+          isDark ? const Color(0xFF121212) : const Color(0xFFFAFAFA);
       _textColor = isDark ? Colors.white70 : Colors.black87;
       _temaInicializado = true;
     }
@@ -181,22 +182,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (minutos > 0) {
       _readingTimer = Timer(Duration(minutes: minutos), () {
         if (mounted) {
-          showDialog(
+          showCupertinoDialog(
             context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: Theme.of(context).cardColor,
+            builder: (context) => CupertinoAlertDialog(
               title: Text(
                 '¡Tiempo cumplido!',
-                style: TextStyle(color: Theme.of(context).primaryColor),
               ),
               content: Text(
                 'Tu temporizador de lectura de $minutos minutos ha finalizado.',
-                style: TextStyle(
-                  color: Theme.of(context).primaryColor.withOpacity(0.8),
-                ),
               ),
               actions: [
-                TextButton(
+                CupertinoDialogAction(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Aceptar'),
                 ),
@@ -271,9 +267,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   color: Colors.white,
                 ),
               ),
-              backgroundColor: _isPomodoroBreak
-                  ? Colors.green
-                  : Colors.redAccent,
+              backgroundColor:
+                  _isPomodoroBreak ? Colors.green : Colors.redAccent,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -306,8 +301,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _epubController != null &&
         widget.documentPath != null) {
       try {
-        final cfi = _epubController!
-            .generateEpubCfi(); // Obtiene posición exacta
+        final cfi =
+            _epubController!.generateEpubCfi(); // Obtiene posición exacta
         if (cfi != null) {
           LocalDbService.guardarProgreso(
             'epub_cfi_${widget.documentPath}',
@@ -328,8 +323,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         !widget.documentPath!.startsWith('http')) {
       try {
         // Extraemos los bytes del PDF con las nuevas anotaciones hechas en pantalla
-        final List<int> documentBytes = await _pdfViewerController
-            .saveDocument();
+        final List<int> documentBytes =
+            await _pdfViewerController.saveDocument();
 
         // Sobrescribimos el archivo local
         final File file = File(widget.documentPath!);
@@ -372,8 +367,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       setState(() => _isSpeaking = false);
     } else {
       // Si está callado, comenzamos la lectura del contenido
-      final textoAleer =
-          widget.contenido ??
+      final textoAleer = widget.contenido ??
           'La educación es el arma más poderosa que puedes usar para cambiar el mundo.\n\nEl acceso a la información siempre ha sido un pilar fundamental para el desarrollo humano. Sin embargo, en la era digital, nos enfrentamos a un nuevo reto: la sobreinformación y la fragmentación del conocimiento.';
 
       // Removemos posibles saltos de línea raros para que la voz fluya natural
@@ -431,80 +425,95 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _mostrarCitasFavoritas() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: _backgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            List<String> citas = LocalDbService.obtenerCitas();
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: _backgroundColor.withOpacity(0.85),
+              child: SafeArea(
+                child: StatefulBuilder(
+                  builder: (context, setModalState) {
+                    List<String> citas = LocalDbService.obtenerCitas();
 
-            return SafeArea(
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.6,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        'Mis Citas Favoritas',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: _textColor,
-                        ),
-                      ),
-                    ),
-                    Divider(color: Colors.grey.withOpacity(0.3)),
-                    if (citas.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Text(
-                          'Aún no has guardado ninguna cita.',
-                          style: TextStyle(color: _textColor.withOpacity(0.6)),
-                        ),
-                      )
-                    else
-                      Flexible(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: citas.length,
-                          itemBuilder: (context, index) {
-                            return ListTile(
-                              leading: Icon(
-                                Icons.format_quote,
-                                color: Theme.of(context).primaryColor,
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics()),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 12),
+                          Container(
+                            width: 40,
+                            height: 5,
+                            decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(
+                              'Mis Citas Favoritas',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _textColor,
                               ),
-                              title: Text(
-                                citas[index],
+                            ),
+                          ),
+                          Divider(color: Colors.grey.withOpacity(0.3)),
+                          if (citas.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Text(
+                                'Aún no has guardado ninguna cita.',
                                 style: TextStyle(
-                                  color: _textColor,
-                                  fontStyle: FontStyle.italic,
-                                ),
+                                    color: _textColor.withOpacity(0.6)),
                               ),
-                              trailing: IconButton(
-                                icon: Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red[300],
-                                ),
-                                onPressed: () {
-                                  LocalDbService.eliminarCita(index);
-                                  setModalState(() {});
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: citas.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  leading: Icon(
+                                    CupertinoIcons.quote_bubble,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                  title: Text(
+                                    citas[index],
+                                    style: TextStyle(
+                                      color: _textColor,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      CupertinoIcons.delete,
+                                      color: CupertinoColors.destructiveRed,
+                                    ),
+                                    onPressed: () {
+                                      HapticFeedback.mediumImpact();
+                                      LocalDbService.eliminarCita(index);
+                                      setModalState(() {});
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
                       ),
-                  ],
+                    );
+                  },
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -521,93 +530,94 @@ class _ReaderScreenState extends State<ReaderScreen> {
           builder: (context, setModalState) {
             final primaryColor = Theme.of(context).primaryColor;
 
-            return DraggableScrollableSheet(
-              initialChildSize: 0.85,
-              minChildSize: 0.5,
-              maxChildSize: 0.95,
-              builder: (_, scrollController) {
-                return Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24),
-                    ),
-                  ),
-                  child: ListView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.all(24.0),
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 5,
-                          margin: const EdgeInsets.only(bottom: 24),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'Ajustes de Lectura',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: primaryColor,
-                          letterSpacing: -0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      // --- TEMPORIZADOR ---
-                      _buildSectionTitle(
-                        'Temporizador de Lectura (Minutos)',
-                        primaryColor,
-                      ),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [0, 15, 30, 45, 60, 120].map((min) {
-                            final isSelected = _timerMinutes == min;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: ChoiceChip(
-                                label: Text(min == 0 ? 'Apagado' : '$min'),
-                                selected: isSelected,
-                                selectedColor: primaryColor,
-                                labelStyle: TextStyle(
-                                  color: isSelected
-                                      ? Theme.of(context).cardColor
-                                      : primaryColor,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).scaffoldBackgroundColor,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                onSelected: (val) {
-                                  setModalState(() {});
-                                  _iniciarTemporizador(min);
-                                },
+            return ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.85,
+                  minChildSize: 0.5,
+                  maxChildSize: 0.95,
+                  builder: (_, scrollController) {
+                    return Container(
+                      color: Theme.of(context).cardColor.withOpacity(0.85),
+                      child: ListView(
+                        controller: scrollController,
+                        physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics()),
+                        padding: const EdgeInsets.all(24.0),
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              margin: const EdgeInsets.only(bottom: 24),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      // --- ORIENTACIÓN ---
-                      _buildSectionTitle(
-                        'Orientación de Lectura',
-                        primaryColor,
-                      ),
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        children:
-                            [
+                            ),
+                          ),
+                          Text(
+                            'Ajustes de Lectura',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              color: primaryColor,
+                              letterSpacing: -0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // --- TEMPORIZADOR ---
+                          _buildSectionTitle(
+                            'Temporizador de Lectura (Minutos)',
+                            primaryColor,
+                          ),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [0, 15, 30, 45, 60, 120].map((min) {
+                                final isSelected = _timerMinutes == min;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: ChoiceChip(
+                                    label: Text(min == 0 ? 'Apagado' : '$min'),
+                                    selected: isSelected,
+                                    selectedColor: primaryColor,
+                                    labelStyle: TextStyle(
+                                      color: isSelected
+                                          ? Theme.of(context).cardColor
+                                          : primaryColor,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).scaffoldBackgroundColor,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    onSelected: (val) {
+                                      setModalState(() {});
+                                      _iniciarTemporizador(min);
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          // --- ORIENTACIÓN ---
+                          _buildSectionTitle(
+                            'Orientación de Lectura',
+                            primaryColor,
+                          ),
+                          Wrap(
+                            spacing: 8.0,
+                            runSpacing: 8.0,
+                            children: [
                               'Vertical (Arriba/Abajo)',
                               'Horizontal (Izq/Der)',
                               'Dos Páginas',
@@ -634,89 +644,91 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 },
                               );
                             }).toList(),
-                      ),
-                      const SizedBox(height: 28),
-                      // --- HERRAMIENTAS (MARCATEXTOS, DIBUJO, NOTAS) ---
-                      _buildSectionTitle(
-                        'Herramientas de Anotación',
-                        primaryColor,
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                _ToolButton(
-                                  icon: Icons.border_color_outlined,
-                                  label: 'Resaltar',
-                                  isActive:
-                                      _highlightColor != Colors.transparent &&
-                                      !_drawMode &&
-                                      !_noteMode,
-                                  onTap: () {
-                                    setModalState(() {
-                                      _drawMode = false;
-                                      _noteMode = false;
-                                      if (_highlightColor ==
-                                          Colors.transparent) {
-                                        _highlightColor = Colors.yellow;
-                                      } else {
-                                        _highlightColor = Colors
-                                            .transparent; // Permite apagar el resaltador
-                                      }
-                                    });
-                                    setState(() {});
-                                  },
-                                ),
-                                _ToolButton(
-                                  icon: Icons.draw_outlined,
-                                  label: 'Dibujar',
-                                  isActive: _drawMode,
-                                  onTap: () {
-                                    setModalState(() {
-                                      _drawMode = !_drawMode;
-                                      if (_drawMode) {
-                                        _noteMode = false;
-                                        _highlightColor = Colors.transparent;
-                                      }
-                                    });
-                                    setState(() {});
-                                  },
-                                ),
-                                _ToolButton(
-                                  icon: Icons.sticky_note_2_outlined,
-                                  label: 'Post-it',
-                                  isActive: _noteMode,
-                                  onTap: () {
-                                    setModalState(() {
-                                      _noteMode = !_noteMode;
-                                      if (_noteMode) {
-                                        _drawMode = false;
-                                        _highlightColor = Colors.transparent;
-                                      }
-                                    });
-                                    setState(() {});
-                                  },
-                                ),
-                              ],
+                          ),
+                          const SizedBox(height: 28),
+                          // --- HERRAMIENTAS (MARCATEXTOS, DIBUJO, NOTAS) ---
+                          _buildSectionTitle(
+                            'Herramientas de Anotación',
+                            primaryColor,
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            if (_highlightColor != Colors.transparent &&
-                                !_drawMode &&
-                                !_noteMode) ...[
-                              Divider(
-                                height: 32,
-                                color: Theme.of(context).dividerColor,
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children:
-                                    [
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _ToolButton(
+                                      icon: Icons.border_color_outlined,
+                                      label: 'Resaltar',
+                                      isActive: _highlightColor !=
+                                              Colors.transparent &&
+                                          !_drawMode &&
+                                          !_noteMode,
+                                      onTap: () {
+                                        setModalState(() {
+                                          _drawMode = false;
+                                          _noteMode = false;
+                                          if (_highlightColor ==
+                                              Colors.transparent) {
+                                            _highlightColor = Colors.yellow;
+                                          } else {
+                                            _highlightColor = Colors
+                                                .transparent; // Permite apagar el resaltador
+                                          }
+                                        });
+                                        setState(() {});
+                                      },
+                                    ),
+                                    _ToolButton(
+                                      icon: Icons.draw_outlined,
+                                      label: 'Dibujar',
+                                      isActive: _drawMode,
+                                      onTap: () {
+                                        setModalState(() {
+                                          _drawMode = !_drawMode;
+                                          if (_drawMode) {
+                                            _noteMode = false;
+                                            _highlightColor =
+                                                Colors.transparent;
+                                          }
+                                        });
+                                        setState(() {});
+                                      },
+                                    ),
+                                    _ToolButton(
+                                      icon: Icons.sticky_note_2_outlined,
+                                      label: 'Post-it',
+                                      isActive: _noteMode,
+                                      onTap: () {
+                                        setModalState(() {
+                                          _noteMode = !_noteMode;
+                                          if (_noteMode) {
+                                            _drawMode = false;
+                                            _highlightColor =
+                                                Colors.transparent;
+                                          }
+                                        });
+                                        setState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                if (_highlightColor != Colors.transparent &&
+                                    !_drawMode &&
+                                    !_noteMode) ...[
+                                  Divider(
+                                    height: 32,
+                                    color: Theme.of(context).dividerColor,
+                                  ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
                                       Colors.yellow,
                                       Colors.greenAccent,
                                       Colors.lightBlueAccent,
@@ -751,50 +763,49 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                         ),
                                       );
                                     }).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      // --- TIPOGRAFÍA Y TAMAÑO ---
-                      _buildSectionTitle('Texto y Fuente', primaryColor),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          // --- TIPOGRAFÍA Y TAMAÑO ---
+                          _buildSectionTitle('Texto y Fuente', primaryColor),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
                               children: [
-                                Icon(
-                                  Icons.font_download_outlined,
-                                  color: primaryColor,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _fontFamily,
-                                      dropdownColor: Theme.of(
-                                        context,
-                                      ).cardColor,
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontSize: 16,
-                                      ),
-                                      isExpanded: true,
-                                      items:
-                                          [
-                                                'System',
-                                                'Serif',
-                                                'Sans Serif',
-                                                'Monospace',
-                                                'Dyslexic',
-                                              ]
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.font_download_outlined,
+                                      color: primaryColor,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: _fontFamily,
+                                          dropdownColor: Theme.of(
+                                            context,
+                                          ).cardColor,
+                                          style: TextStyle(
+                                            color: primaryColor,
+                                            fontSize: 16,
+                                          ),
+                                          isExpanded: true,
+                                          items: [
+                                            'System',
+                                            'Serif',
+                                            'Sans Serif',
+                                            'Monospace',
+                                            'Dyslexic',
+                                          ]
                                               .map(
                                                 (f) => DropdownMenuItem(
                                                   value: f,
@@ -802,155 +813,156 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                                 ),
                                               )
                                               .toList(),
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setModalState(
-                                            () => _fontFamily = val,
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setModalState(
+                                                () => _fontFamily = val,
+                                              );
+                                              setState(() => _fontFamily = val);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Divider(
+                                  height: 24,
+                                  color: Theme.of(context).dividerColor,
+                                ),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.text_fields,
+                                      color: primaryColor,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Slider(
+                                        value: _fontSize,
+                                        min: 12,
+                                        max: 32,
+                                        activeColor: primaryColor,
+                                        inactiveColor: primaryColor.withOpacity(
+                                          0.2,
+                                        ),
+                                        onChanged: (val) {
+                                          setModalState(() => _fontSize = val);
+                                          setState(() => _fontSize = val);
+                                        },
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_fontSize.toInt()}',
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          // --- PANTALLA Y BRILLO ---
+                          _buildSectionTitle('Pantalla', primaryColor),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.brightness_low_outlined,
+                                      color: primaryColor,
+                                    ),
+                                    Expanded(
+                                      child: Slider(
+                                        value: _brillo,
+                                        activeColor: primaryColor,
+                                        inactiveColor: primaryColor.withOpacity(
+                                          0.2,
+                                        ),
+                                        onChanged: (val) {
+                                          setModalState(() => _brillo = val);
+                                          setState(() => _brillo = val);
+                                          ScreenBrightness()
+                                              .setScreenBrightness(
+                                            val,
                                           );
-                                          setState(() => _fontFamily = val);
-                                        }
+                                        },
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.brightness_high_outlined,
+                                      color: primaryColor,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Temas de Fondo',
+                                  style: TextStyle(
+                                    color: primaryColor.withOpacity(0.6),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    _ColorThemeSelector(
+                                      color: const Color(0xFFFFFFFF),
+                                      name: 'Blanco',
+                                      isSelected: _backgroundColor ==
+                                          const Color(0xFFFFFFFF),
+                                      onTap: () {
+                                        setModalState(() {});
+                                        _cambiarTema('Blanco');
                                       },
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Divider(
-                              height: 24,
-                              color: Theme.of(context).dividerColor,
-                            ),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.text_fields,
-                                  color: primaryColor,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Slider(
-                                    value: _fontSize,
-                                    min: 12,
-                                    max: 32,
-                                    activeColor: primaryColor,
-                                    inactiveColor: primaryColor.withOpacity(
-                                      0.2,
+                                    _ColorThemeSelector(
+                                      color: const Color(0xFFFBF0D9),
+                                      name: 'Sepia',
+                                      isSelected: _backgroundColor ==
+                                          const Color(0xFFFBF0D9),
+                                      onTap: () {
+                                        setModalState(() {});
+                                        _cambiarTema('Amarillo');
+                                      },
                                     ),
-                                    onChanged: (val) {
-                                      setModalState(() => _fontSize = val);
-                                      setState(() => _fontSize = val);
-                                    },
-                                  ),
-                                ),
-                                Text(
-                                  '${_fontSize.toInt()}',
-                                  style: TextStyle(
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      // --- PANTALLA Y BRILLO ---
-                      _buildSectionTitle('Pantalla', primaryColor),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.brightness_low_outlined,
-                                  color: primaryColor,
-                                ),
-                                Expanded(
-                                  child: Slider(
-                                    value: _brillo,
-                                    activeColor: primaryColor,
-                                    inactiveColor: primaryColor.withOpacity(
-                                      0.2,
+                                    _ColorThemeSelector(
+                                      color: const Color(0xFF000000),
+                                      name: 'Noche',
+                                      isSelected: _backgroundColor ==
+                                          const Color(0xFF000000),
+                                      onTap: () {
+                                        setModalState(() {});
+                                        _cambiarTema('Negro');
+                                      },
                                     ),
-                                    onChanged: (val) {
-                                      setModalState(() => _brillo = val);
-                                      setState(() => _brillo = val);
-                                      ScreenBrightness().setScreenBrightness(
-                                        val,
-                                      );
-                                    },
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.brightness_high_outlined,
-                                  color: primaryColor,
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Temas de Fondo',
-                              style: TextStyle(
-                                color: primaryColor.withOpacity(0.6),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                _ColorThemeSelector(
-                                  color: const Color(0xFFFFFFFF),
-                                  name: 'Blanco',
-                                  isSelected:
-                                      _backgroundColor ==
-                                      const Color(0xFFFFFFFF),
-                                  onTap: () {
-                                    setModalState(() {});
-                                    _cambiarTema('Blanco');
-                                  },
-                                ),
-                                _ColorThemeSelector(
-                                  color: const Color(0xFFFBF0D9),
-                                  name: 'Sepia',
-                                  isSelected:
-                                      _backgroundColor ==
-                                      const Color(0xFFFBF0D9),
-                                  onTap: () {
-                                    setModalState(() {});
-                                    _cambiarTema('Amarillo');
-                                  },
-                                ),
-                                _ColorThemeSelector(
-                                  color: const Color(0xFF000000),
-                                  name: 'Noche',
-                                  isSelected:
-                                      _backgroundColor ==
-                                      const Color(0xFF000000),
-                                  onTap: () {
-                                    setModalState(() {});
-                                    _cambiarTema('Negro');
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
                       ),
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             );
           },
         );
@@ -997,9 +1009,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     child: Text(
                       '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
                       style: TextStyle(
-                        color: _isPomodoroBreak
-                            ? Colors.green
-                            : Colors.redAccent,
+                        color:
+                            _isPomodoroBreak ? Colors.green : Colors.redAccent,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -1060,19 +1071,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
       // Botón flotante para el Diccionario cuando se selecciona texto en un PDF
       floatingActionButton:
           _selectedPdfText != null && _selectedPdfText!.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                _mostrarDefinicion(_selectedPdfText!);
-                setState(
-                  () => _selectedPdfText = null,
-                ); // Ocultar el botón después de buscar
-              },
-              icon: const Icon(Icons.language),
-              label: const Text('Definir en Wikipedia'),
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-            )
-          : null,
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    _mostrarDefinicion(_selectedPdfText!);
+                    setState(
+                      () => _selectedPdfText = null,
+                    ); // Ocultar el botón después de buscar
+                  },
+                  icon: const Icon(Icons.language),
+                  label: const Text('Definir en Wikipedia'),
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+                )
+              : null,
       // BARRA INFERIOR DE CONTROLES (Minimalista)
       // Ocultamos los controles si es un PDF, ya que manejan su propio flujo.
       bottomNavigationBar: widget.isPdf
@@ -1104,9 +1115,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                     color: _textColor,
                                   ),
                                   onPressed: () => setState(
-                                    () => _fontSize = (_fontSize > 14)
-                                        ? _fontSize - 2
-                                        : 14,
+                                    () => _fontSize =
+                                        (_fontSize > 14) ? _fontSize - 2 : 14,
                                   ),
                                 ),
                                 IconButton(
@@ -1115,9 +1125,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                     color: _textColor,
                                   ),
                                   onPressed: () => setState(
-                                    () => _fontSize = (_fontSize < 30)
-                                        ? _fontSize + 2
-                                        : 30,
+                                    () => _fontSize =
+                                        (_fontSize < 30) ? _fontSize + 2 : 30,
                                   ),
                                 ),
                               ],
@@ -1159,10 +1168,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
               child: _cargandoProgreso
                   ? Center(child: CircularProgressIndicator(color: _textColor))
                   : widget.isPdf && widget.documentPath != null
-                  ? _buildPdfViewer()
-                  : widget.isEpub && widget.documentPath != null
-                  ? _buildEpubViewer()
-                  : _buildTextArticle(),
+                      ? _buildPdfViewer()
+                      : widget.isEpub && widget.documentPath != null
+                          ? _buildEpubViewer()
+                          : _buildTextArticle(),
             ),
             // Capa Superior: La Isla Flotante del Pomodoro
             if (_isPomodoroActive)
@@ -1182,9 +1191,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       ), // Isla Dinámica estilo iOS
                       borderRadius: BorderRadius.circular(40),
                       border: Border.all(
-                        color: _isPomodoroBreak
-                            ? Colors.green
-                            : Colors.redAccent,
+                        color:
+                            _isPomodoroBreak ? Colors.green : Colors.redAccent,
                         width: 1.5,
                       ),
                       boxShadow: [
@@ -1268,130 +1276,128 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
             contextMenuBuilder:
                 (BuildContext context, EditableTextState editableTextState) {
-                  final List<ContextMenuButtonItem> buttonItems =
-                      editableTextState.contextMenuButtonItems;
+              final List<ContextMenuButtonItem> buttonItems =
+                  editableTextState.contextMenuButtonItems;
 
-                  // Insertamos nuestro botón de "Definir" al inicio del menú nativo
-                  buttonItems.insert(
-                    0,
-                    ContextMenuButtonItem(
-                      label: '📖 Definir',
-                      onPressed: () {
-                        final textEditingValue =
-                            editableTextState.textEditingValue;
-                        final selectedText = textEditingValue.selection
-                            .textInside(textEditingValue.text)
-                            .trim();
+              // Insertamos nuestro botón de "Definir" al inicio del menú nativo
+              buttonItems.insert(
+                0,
+                ContextMenuButtonItem(
+                  label: '📖 Definir',
+                  onPressed: () {
+                    final textEditingValue = editableTextState.textEditingValue;
+                    final selectedText = textEditingValue.selection
+                        .textInside(textEditingValue.text)
+                        .trim();
 
-                        ContextMenuController.removeAny(); // Cerramos el menú flotante
-                        _mostrarDefinicion(
-                          selectedText,
-                        ); // Mostramos el globo de diccionario
-                      },
-                    ),
-                  );
+                    ContextMenuController
+                        .removeAny(); // Cerramos el menú flotante
+                    _mostrarDefinicion(
+                      selectedText,
+                    ); // Mostramos el globo de diccionario
+                  },
+                ),
+              );
 
-                  // Insertamos nuestro botón de "Guardar Cita"
-                  buttonItems.insert(
-                    1,
-                    ContextMenuButtonItem(
-                      label: '⭐ Guardar Cita',
-                      onPressed: () {
-                        final textEditingValue =
-                            editableTextState.textEditingValue;
-                        final selectedText = textEditingValue.selection
-                            .textInside(textEditingValue.text)
-                            .trim();
+              // Insertamos nuestro botón de "Guardar Cita"
+              buttonItems.insert(
+                1,
+                ContextMenuButtonItem(
+                  label: '⭐ Guardar Cita',
+                  onPressed: () {
+                    final textEditingValue = editableTextState.textEditingValue;
+                    final selectedText = textEditingValue.selection
+                        .textInside(textEditingValue.text)
+                        .trim();
 
-                        ContextMenuController.removeAny();
-                        _guardarCita(selectedText);
-                      },
-                    ),
-                  );
+                    ContextMenuController.removeAny();
+                    _guardarCita(selectedText);
+                  },
+                ),
+              );
 
-                  // Insertamos nuestro botón de "Resumir con IA"
-                  buttonItems.insert(
-                    2,
-                    ContextMenuButtonItem(
-                      label: '✨ Resumir con IA',
-                      onPressed: () async {
-                        final textEditingValue =
-                            editableTextState.textEditingValue;
-                        final selectedText = textEditingValue.selection
-                            .textInside(textEditingValue.text)
-                            .trim();
+              // Insertamos nuestro botón de "Resumir con IA"
+              buttonItems.insert(
+                2,
+                ContextMenuButtonItem(
+                  label: '✨ Resumir con IA',
+                  onPressed: () async {
+                    final textEditingValue = editableTextState.textEditingValue;
+                    final selectedText = textEditingValue.selection
+                        .textInside(textEditingValue.text)
+                        .trim();
 
-                        ContextMenuController.removeAny();
+                    ContextMenuController.removeAny();
 
-                        // Mostramos diálogo de carga
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (context) => AlertDialog(
-                            backgroundColor: _backgroundColor,
-                            content: Row(
-                              children: [
-                                CircularProgressIndicator(
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    'Consultando a la IA...',
-                                    style: TextStyle(color: _textColor),
-                                  ),
-                                ),
-                              ],
+                    // Mostramos diálogo de carga
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: _backgroundColor,
+                        content: Row(
+                          children: [
+                            CircularProgressIndicator(
+                              color: Theme.of(context).primaryColor,
                             ),
-                          ),
-                        );
-
-                        final aiService = AiTranslationService();
-                        final resumen = await aiService.getResumen(
-                          widget.titulo,
-                          selectedText,
-                        );
-
-                        if (context.mounted) {
-                          Navigator.pop(
-                            context,
-                          ); // Cerramos el indicador de carga
-                          // Mostramos el resumen
-                          _mostrarDefinicion(
-                            resumen,
-                          ); // Reutilizamos tu método de diálogo, o creas uno nuevo
-                        }
-                      },
-                    ),
-                  );
-
-                  // Insertamos nuestro botón de "Resaltar" y "Notas"
-                  buttonItems.insert(
-                    3,
-                    ContextMenuButtonItem(
-                      label: '🖍️ Resaltar',
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Texto resaltado.',
-                              style: TextStyle(
-                                color: Theme.of(context).primaryColor,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                'Consultando a la IA...',
+                                style: TextStyle(color: _textColor),
                               ),
                             ),
-                            backgroundColor: Theme.of(context).cardColor,
-                          ),
-                        );
-                      },
-                    ),
-                  );
+                          ],
+                        ),
+                      ),
+                    );
 
-                  return AdaptiveTextSelectionToolbar.buttonItems(
-                    anchors: editableTextState.contextMenuAnchors,
-                    buttonItems: buttonItems,
-                  );
-                },
+                    final aiService = AiTranslationService();
+                    final resumen = await aiService.getResumen(
+                      widget.titulo,
+                      selectedText,
+                    );
+
+                    if (context.mounted) {
+                      Navigator.pop(
+                        context,
+                      ); // Cerramos el indicador de carga
+                      // Mostramos el resumen
+                      _mostrarDefinicion(
+                        resumen,
+                      ); // Reutilizamos tu método de diálogo, o creas uno nuevo
+                    }
+                  },
+                ),
+              );
+
+              // Insertamos nuestro botón de "Resaltar" y "Notas"
+              buttonItems.insert(
+                3,
+                ContextMenuButtonItem(
+                  label: '🖍️ Resaltar',
+                  onPressed: () {
+                    ContextMenuController.removeAny();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Texto resaltado.',
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        backgroundColor: Theme.of(context).cardColor,
+                      ),
+                    );
+                  },
+                ),
+              );
+
+              return AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: editableTextState.contextMenuAnchors,
+                buttonItems: buttonItems,
+              );
+            },
           ),
           const SizedBox(height: 40),
         ],
@@ -1463,9 +1469,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final bool modoAnotacionActivo =
         _drawMode || (_highlightColor != Colors.transparent && !_noteMode);
 
-    final textDirection = _modoVista == 'Manga (Der/Izq)'
-        ? TextDirection.rtl
-        : TextDirection.ltr;
+    final textDirection =
+        _modoVista == 'Manga (Der/Izq)' ? TextDirection.rtl : TextDirection.ltr;
 
     return Stack(
       children: [
@@ -1772,13 +1777,11 @@ class _AnotacionPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final trazo in trazos) {
       final paint = Paint()
-        ..color = trazo.esResaltador
-            ? trazo.color.withOpacity(0.4)
-            : trazo.color
+        ..color =
+            trazo.esResaltador ? trazo.color.withOpacity(0.4) : trazo.color
         ..strokeCap = trazo.esResaltador ? StrokeCap.square : StrokeCap.round
-        ..strokeWidth = trazo.esResaltador
-            ? 22.0
-            : 3.0 // Resaltador ancho, lápiz delgado
+        ..strokeWidth =
+            trazo.esResaltador ? 22.0 : 3.0 // Resaltador ancho, lápiz delgado
         ..style = PaintingStyle.stroke;
 
       for (int i = 0; i < trazo.puntos.length - 1; i++) {

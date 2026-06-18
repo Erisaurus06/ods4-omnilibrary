@@ -111,12 +111,28 @@ $text
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List<dynamic> flashcardList = jsonDecode(
-          data['candidates'][0]['content']['parts'][0]['text'],
-        );
-        return flashcardList
-            .map((item) => Map<String, String>.from(item))
-            .toList();
+
+        if (data['candidates'] == null ||
+            (data['candidates'] as List).isEmpty) {
+          return [];
+        }
+
+        String jsonText = data['candidates'][0]['content']['parts'][0]['text'];
+        // Limpiar posible formato markdown residual (Gemini suele agregarlo incluso con application/json)
+        jsonText = jsonText
+            .replaceAll(RegExp(r'```json\n?'), '')
+            .replaceAll(RegExp(r'```\n?'), '')
+            .trim();
+
+        final List<dynamic> flashcardList = jsonDecode(jsonText);
+        return flashcardList.map((item) {
+          final map = item as Map<String, dynamic>;
+          return {
+            'titulo': map['titulo']?.toString() ?? 'Sin título',
+            'contenido': map['contenido']?.toString() ?? 'Sin contenido',
+            'color': map['color']?.toString() ?? '0xFFFFF59D',
+          };
+        }).toList();
       } else {
         return [];
       }
@@ -155,6 +171,12 @@ $text
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
+        if (data['candidates'] == null ||
+            (data['candidates'] as List).isEmpty) {
+          return 'El contenido fue bloqueado o no se pudo generar el resumen.';
+        }
+
         final generatedText =
             data['candidates'][0]['content']['parts'][0]['text'];
         return '✨ Resumen de la IA:\n\n$generatedText';

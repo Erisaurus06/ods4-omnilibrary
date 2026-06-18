@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../services/local_db_service.dart';
+import '../../services/local_db_service.dart';
 
 class SeccionTareas extends StatefulWidget {
   const SeccionTareas({super.key});

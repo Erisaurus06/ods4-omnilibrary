@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:math' as math;
-import '../services/local_db_service.dart';
+import 'dart:ui';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../../services/local_db_service.dart';
 
 List<Map<String, String>> _procesarFlashcardsEnFondo(
   List<Map<String, String>> rawData,
@@ -15,18 +17,18 @@ List<Map<String, String>> _procesarFlashcardsEnFondo(
   return flashcards;
 }
 
-class SeccionFlashcards extends StatefulWidget {
-  const SeccionFlashcards({super.key});
-
+class FlashcardsTab extends StatefulWidget {
+  const FlashcardsTab({super.key});
   @override
-  State<SeccionFlashcards> createState() => _SeccionFlashcardsState();
+  State<FlashcardsTab> createState() => _FlashcardsTabState();
 }
 
-class _SeccionFlashcardsState extends State<SeccionFlashcards> {
+class _FlashcardsTabState extends State<FlashcardsTab> {
   final _tituloController = TextEditingController();
   final _contenidoController = TextEditingController();
   final _mazoController = TextEditingController();
   List<Map<String, String>> _misFlashcards = [];
+
   int _modoFlashcards = 0;
   bool _quizActivo = false;
   int _quizIndex = 0;
@@ -65,204 +67,222 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children:
-                          [
-                            '0xFFFFF59D',
-                            '0xFFB39DDB',
-                            '0xFFA5D6A7',
-                            '0xFF90CAF9',
-                            '0xFFFFAB91',
-                          ].map((colorHex) {
-                            final isSelected = selectedColor == colorHex;
-                            return GestureDetector(
-                              onTap: () =>
-                                  setModalState(() => selectedColor = colorHex),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: isSelected ? 40 : 32,
-                                height: isSelected ? 40 : 32,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: Theme.of(context).cardColor.withOpacity(0.85),
+              padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: SafeArea(
+                child: StatefulBuilder(
+                  builder: (context, setModalState) {
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics()),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 40,
+                                height: 5,
                                 decoration: BoxDecoration(
-                                  color: Color(int.parse(colorHex)),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? Theme.of(context).primaryColor
-                                        : Colors.transparent,
-                                    width: 2,
+                                    color: Colors.grey.withOpacity(0.5),
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Wrap(
+                              alignment: WrapAlignment.spaceEvenly,
+                              spacing: 12,
+                              children: [
+                                '0xFFFFF59D',
+                                '0xFFB39DDB',
+                                '0xFFA5D6A7',
+                                '0xFF90CAF9',
+                                '0xFFFFAB91',
+                              ].map((colorHex) {
+                                final isSelected = selectedColor == colorHex;
+                                return GestureDetector(
+                                  onTap: () => setModalState(
+                                    () => selectedColor = colorHex,
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: isSelected ? 40 : 32,
+                                    height: isSelected ? 40 : 32,
+                                    decoration: BoxDecoration(
+                                      color: Color(int.parse(colorHex)),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context).primaryColor
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _tituloController,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'Concepto (Frente)',
+                                border: InputBorder.none,
+                              ),
+                              textCapitalization: TextCapitalization.sentences,
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _mazoController,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                              decoration: InputDecoration(
+                                icon: Icon(
+                                  Icons.folder,
+                                  color: Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.5),
+                                ),
+                                hintText: 'Mazo o Categoría (Ej. Biología)',
+                                border: InputBorder.none,
+                              ),
+                              textCapitalization: TextCapitalization.words,
+                            ),
+                            const Divider(),
+                            Container(
+                              constraints: BoxConstraints(
+                                maxHeight:
+                                    MediaQuery.of(context).size.height * 0.4,
+                              ),
+                              child: SingleChildScrollView(
+                                child: TextField(
+                                  controller: _contenidoController,
+                                  maxLines: null,
+                                  minLines: 5,
+                                  style: const TextStyle(
+                                      fontSize: 16, height: 1.5),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Respuesta / Apunte (Reverso)...',
+                                    border: InputBorder.none,
+                                  ),
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  final titulo = _tituloController.text;
+                                  final contenido = _contenidoController.text;
+                                  if (titulo.isNotEmpty &&
+                                      contenido.isNotEmpty) {
+                                    setState(() {
+                                      final fcData = {
+                                        ...(flashcardExistente ?? {}),
+                                        'titulo': titulo,
+                                        'contenido': contenido,
+                                        'mazo':
+                                            _mazoController.text.trim().isEmpty
+                                                ? 'General'
+                                                : _mazoController.text.trim(),
+                                        'color': selectedColor,
+                                        if (flashcardExistente == null) ...{
+                                          'reps': '0',
+                                          'ease': '2.5',
+                                          'interval': '0',
+                                          'nextReview':
+                                              DateTime.now().toIso8601String(),
+                                        },
+                                      };
+                                      if (flashcardExistente != null &&
+                                          index != null) {
+                                        _misFlashcards[index] = fcData;
+                                      } else {
+                                        _misFlashcards.insert(0, fcData);
+                                      }
+                                    });
+                                    LocalDbService.guardarFlashcards(
+                                      _misFlashcards,
+                                    );
+                                    _tituloController.clear();
+                                    _contenidoController.clear();
+                                    _mazoController.clear();
+                                    Navigator.pop(context);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      Theme.of(context).primaryColor,
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).scaffoldBackgroundColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  flashcardExistente != null
+                                      ? 'Actualizar Flashcard'
+                                      : 'Crear Flashcard',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
-                            );
-                          }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _tituloController,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Concepto (Frente)',
-                        border: InputBorder.none,
-                      ),
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _mazoController,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                      decoration: InputDecoration(
-                        icon: Icon(
-                          Icons.folder,
-                          color: Theme.of(
-                            context,
-                          ).primaryColor.withOpacity(0.5),
-                        ),
-                        hintText: 'Mazo o Categoría (Ej. Biología)',
-                        border: InputBorder.none,
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    const Divider(),
-                    Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.4,
-                      ),
-                      child: SingleChildScrollView(
-                        child: TextField(
-                          controller: _contenidoController,
-                          maxLines: null,
-                          minLines: 5,
-                          style: const TextStyle(fontSize: 16, height: 1.5),
-                          decoration: const InputDecoration(
-                            hintText: 'Respuesta / Apunte (Reverso)...',
-                            border: InputBorder.none,
-                          ),
-                          textCapitalization: TextCapitalization.sentences,
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final titulo = _tituloController.text;
-                          final contenido = _contenidoController.text;
-                          if (titulo.isNotEmpty && contenido.isNotEmpty) {
-                            setState(() {
-                              if (flashcardExistente != null && index != null) {
-                                _misFlashcards[index] = {
-                                  ...flashcardExistente,
-                                  'titulo': titulo,
-                                  'contenido': contenido,
-                                  'mazo': _mazoController.text.trim().isEmpty
-                                      ? 'General'
-                                      : _mazoController.text.trim(),
-                                  'color': selectedColor,
-                                };
-                              } else {
-                                _misFlashcards.insert(0, {
-                                  'titulo': titulo,
-                                  'contenido': contenido,
-                                  'mazo': _mazoController.text.trim().isEmpty
-                                      ? 'General'
-                                      : _mazoController.text.trim(),
-                                  'color': selectedColor,
-                                  'reps': '0',
-                                  'ease': '2.5',
-                                  'interval': '0',
-                                  'nextReview': DateTime.now()
-                                      .toIso8601String(),
-                                });
-                              }
-                            });
-                            LocalDbService.guardarFlashcards(_misFlashcards);
-                            _tituloController.clear();
-                            _contenidoController.clear();
-                            _mazoController.clear();
-                            Navigator.pop(context);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).primaryColor,
-                          foregroundColor: Theme.of(
-                            context,
-                          ).scaffoldBackgroundColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          flashcardExistente != null
-                              ? 'Actualizar Flashcard'
-                              : 'Crear Flashcard',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   void _confirmarEliminar(int index) {
-    showDialog(
+    showCupertinoDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      builder: (ctx) => CupertinoAlertDialog(
         title: Text(
           'Eliminar Flashcard',
-          style: TextStyle(
-            color: Theme.of(context).primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
         ),
         content: Text(
-          '¿Deseas eliminar esta tarjeta de memoria?',
-          style: TextStyle(
-            color: Theme.of(context).primaryColor.withOpacity(0.8),
-          ),
+          '¿Deseas eliminar esta tarjeta?',
         ),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
-          TextButton(
+          CupertinoDialogAction(
+            isDestructiveAction: true,
             onPressed: () {
+              HapticFeedback.mediumImpact();
               Navigator.pop(ctx);
               setState(() => _misFlashcards.removeAt(index));
               LocalDbService.guardarFlashcards(_misFlashcards);
@@ -270,7 +290,6 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
             child: const Text(
               'Sí',
               style: TextStyle(
-                color: Colors.redAccent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -290,8 +309,8 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
           _modoFlashcards == 0
               ? 'Flashcards 🎴'
               : _modoFlashcards == 1
-              ? 'Modo Estudio 🧠'
-              : 'Bloques de Notas 📚',
+                  ? 'Modo Estudio 🧠'
+                  : 'Bloques de Notas 📚',
           style: const TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
@@ -342,7 +361,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
           elevation: 4,
           backgroundColor: Theme.of(context).primaryColor,
           foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-          child: const Icon(Icons.add),
+          child: const Icon(CupertinoIcons.add),
         ),
       ),
       body: _isLoading
@@ -353,22 +372,20 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
               ).animate().fade(duration: 400.ms),
             )
           : _modoFlashcards == 0
-          ? _construirGridTarjetas()
-          : _modoFlashcards == 1
-          ? _construirModoEstudio()
-          : _construirBloquesNotas(),
+              ? _construirGridTarjetas()
+              : _modoFlashcards == 1
+                  ? _construirModoEstudio()
+                  : _construirBloquesNotas(),
     );
   }
 
   Widget _construirGridTarjetas() {
-    final mazos = _misFlashcards
-        .map((f) => f['mazo'] ?? 'General')
-        .toSet()
-        .toList();
+    final mazos =
+        _misFlashcards.map((f) => f['mazo'] ?? 'General').toSet().toList();
     if (_misFlashcards.isEmpty)
       return Center(
         child: Text(
-          'Tus flashcards aparecerán aquí organizadas por mazos.',
+          'Tus flashcards aparecerán aquí.',
           style: TextStyle(
             color: Theme.of(context).primaryColor.withOpacity(0.5),
           ),
@@ -392,24 +409,32 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.folder_open,
+                    CupertinoIcons.folder,
                     color: Theme.of(context).primaryColor.withOpacity(0.7),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    mazo,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
+                  Expanded(
+                    child: Text(
+                      mazo,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    '${tarjetasMazo.length}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Theme.of(context).primaryColor.withOpacity(0.5),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '${tarjetasMazo.length}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).primaryColor.withOpacity(0.5),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -455,12 +480,13 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
     if (_misFlashcards.isEmpty)
       return Center(
         child: Text(
-          'Agrega flashcards primero para estudiar.',
+          'Agrega flashcards primero.',
           style: TextStyle(
             color: Theme.of(context).primaryColor.withOpacity(0.5),
           ),
         ),
       );
+
     final now = DateTime.now();
     final pendientes = _misFlashcards.where((fc) {
       final nextReviewStr = fc['nextReview'];
@@ -474,17 +500,12 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.school, size: 80, color: Colors.blueAccent),
+            const Icon(CupertinoIcons.book_fill,
+                size: 80, color: CupertinoColors.activeBlue),
             const SizedBox(height: 16),
             const Text(
               'Modo Estudio Interactivo',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'El algoritmo calculará cuándo debes\nvolver a ver cada tarjeta.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 16),
             if (pendientes.isNotEmpty)
@@ -498,7 +519,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
               )
             else
               const Text(
-                '¡Todo al día! No tienes tarjetas pendientes. 🎉',
+                '¡Todo al día! 🎉',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.orangeAccent,
@@ -516,16 +537,13 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
                         _quizIndex = 0;
                       });
                     },
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Iniciar Repaso'),
+              icon: const Icon(CupertinoIcons.play_fill),
+              label: const Text('Iniciar Repaso',
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -533,6 +551,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
         ),
       );
     }
+
     final flashcard = _dueFlashcards[_quizIndex];
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -560,13 +579,23 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
           style: TextStyle(color: Colors.grey, fontSize: 14),
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildCalificacionBtn('Difícil', Colors.redAccent, 2),
-            _buildCalificacionBtn('Bien', Colors.blueAccent, 4),
-            _buildCalificacionBtn('Fácil', Colors.green, 5),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            children: [
+              Expanded(
+                  child: _buildCalificacionBtn(
+                      'Difícil', CupertinoColors.destructiveRed, 2)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _buildCalificacionBtn(
+                      'Bien', CupertinoColors.activeBlue, 4)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _buildCalificacionBtn(
+                      'Fácil', CupertinoColors.activeGreen, 5)),
+            ],
+          ),
         ),
       ],
     );
@@ -601,6 +630,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
     final currentCard = _dueFlashcards[_quizIndex];
     final originalIndex = _misFlashcards.indexOf(currentCard);
     if (originalIndex == -1) return;
+
     int reps = int.tryParse(currentCard['reps'] ?? '0') ?? 0;
     double ease = double.tryParse(currentCard['ease'] ?? '2.5') ?? 2.5;
     int interval = int.tryParse(currentCard['interval'] ?? '0') ?? 0;
@@ -609,26 +639,26 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
       reps = 0;
       interval = 1;
     } else {
-      if (reps == 0) {
+      if (reps == 0)
         interval = 1;
-      } else if (reps == 1) {
+      else if (reps == 1)
         interval = 6;
-      } else {
+      else
         interval = (interval * ease).round();
-      }
       reps++;
     }
+
     ease = ease + (0.1 - (5 - calidad) * (0.08 + (5 - calidad) * 0.02));
     if (ease < 1.3) ease = 1.3;
 
-    final nextReview = DateTime.now().add(Duration(days: interval));
     setState(() {
       _misFlashcards[originalIndex] = {
         ...currentCard,
         'reps': reps.toString(),
         'ease': ease.toString(),
         'interval': interval.toString(),
-        'nextReview': nextReview.toIso8601String(),
+        'nextReview':
+            DateTime.now().add(Duration(days: interval)).toIso8601String(),
       };
       if (_quizIndex < _dueFlashcards.length - 1) {
         _quizIndex++;
@@ -636,7 +666,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
         _quizActivo = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('¡Sesión de estudio completada por hoy! 🎉🧠'),
+            content: const Text('¡Sesión completada! 🎉🧠'),
             backgroundColor: Theme.of(context).primaryColor,
           ),
         );
@@ -649,13 +679,12 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
     if (_misFlashcards.isEmpty)
       return const Center(
         child: Text(
-          'Aquí se mostrarán tus bloques de notas estructuradas\npara repasar antes del Quiz.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+          'Sin bloques de notas',
+          style: TextStyle(color: Colors.grey),
         ),
       );
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
       physics: const BouncingScrollPhysics(),
       itemCount: _misFlashcards.length,
       separatorBuilder: (c, i) => const SizedBox(height: 16),
@@ -676,7 +705,7 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
               Row(
                 children: [
                   Icon(
-                    Icons.auto_awesome,
+                    CupertinoIcons.sparkles,
                     color: Color(int.parse(nota['color']!)),
                     size: 20,
                   ),
@@ -688,6 +717,8 @@ class _SeccionFlashcardsState extends State<SeccionFlashcards> {
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -717,6 +748,7 @@ class _FlashcardItem extends StatefulWidget {
     required this.onLongPress,
     required this.onEdit,
   });
+
   @override
   State<_FlashcardItem> createState() => _FlashcardItemState();
 }
@@ -747,11 +779,10 @@ class _FlashcardItemState extends State<_FlashcardItem>
 
   void _flipCard() {
     HapticFeedback.lightImpact();
-    if (_isFront) {
+    if (_isFront)
       _controller.forward();
-    } else {
+    else
       _controller.reverse();
-    }
     _isFront = !_isFront;
   }
 
@@ -768,6 +799,7 @@ class _FlashcardItemState extends State<_FlashcardItem>
             ..setEntry(3, 2, 0.001)
             ..rotateY(angle);
           final isBackShowing = angle > math.pi / 2;
+
           return Transform(
             transform: transform,
             alignment: Alignment.center,
@@ -812,7 +844,7 @@ class _FlashcardItemState extends State<_FlashcardItem>
                             right: -12,
                             child: IconButton(
                               icon: const Icon(
-                                Icons.edit_outlined,
+                                CupertinoIcons.pencil,
                                 color: Colors.black54,
                                 size: 20,
                               ),
@@ -843,7 +875,7 @@ class _FlashcardItemState extends State<_FlashcardItem>
                               ),
                             ),
                             Icon(
-                              Icons.flip_camera_android,
+                              CupertinoIcons.arrow_2_squarepath,
                               color: Colors.black.withOpacity(0.2),
                               size: 20,
                             ),
@@ -854,7 +886,7 @@ class _FlashcardItemState extends State<_FlashcardItem>
                           right: -12,
                           child: IconButton(
                             icon: const Icon(
-                              Icons.edit_outlined,
+                              CupertinoIcons.pencil,
                               color: Colors.black54,
                               size: 20,
                             ),

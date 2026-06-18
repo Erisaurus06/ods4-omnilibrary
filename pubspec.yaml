@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.5
+  sdk: ^3.1.0 # <-- CORREGIDO: Versión estable de Dart 3
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -42,13 +42,11 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   local_auth: ^2.1.8
-  light: ^2.0.1
-  screen_brightness: ^0.2.1 
-  # Nota cómo http y webfeed_revised están al mismo nivel que flutter
+  light: ^5.0.0
+  screen_brightness: ^0.2.1 # <-- Mantenemos solo esta declaración
   http: ^1.2.0
   path_provider: any
   provider: ^6.1.1
-  screen_brightness: any
   shared_preferences: ^2.2.2
   share_plus: ^10.0.0
   supabase_flutter: ^2.12.4
