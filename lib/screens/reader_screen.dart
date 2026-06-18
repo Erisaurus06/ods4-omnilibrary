@@ -9,6 +9,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../services/local_db_service.dart';
 import '../services/dictionary_service.dart';
 import '../services/ai_translation_service.dart';
@@ -664,7 +665,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                       MainAxisAlignment.spaceAround,
                                   children: [
                                     _ToolButton(
-                                      icon: Icons.border_color_outlined,
+                                      icon: CupertinoIcons.paintbrush,
                                       label: 'Resaltar',
                                       isActive: _highlightColor !=
                                               Colors.transparent &&
@@ -686,7 +687,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                       },
                                     ),
                                     _ToolButton(
-                                      icon: Icons.draw_outlined,
+                                      icon: CupertinoIcons.pencil,
                                       label: 'Dibujar',
                                       isActive: _drawMode,
                                       onTap: () {
@@ -702,7 +703,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                       },
                                     ),
                                     _ToolButton(
-                                      icon: Icons.sticky_note_2_outlined,
+                                      icon: CupertinoIcons.doc_text,
                                       label: 'Post-it',
                                       isActive: _noteMode,
                                       onTap: () {
@@ -782,7 +783,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.font_download_outlined,
+                                      CupertinoIcons.textformat,
                                       color: primaryColor,
                                       size: 22,
                                     ),
@@ -833,7 +834,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.text_fields,
+                                      CupertinoIcons.textformat_size,
                                       color: primaryColor,
                                       size: 22,
                                     ),
@@ -881,7 +882,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.brightness_low_outlined,
+                                      CupertinoIcons.sun_min,
                                       color: primaryColor,
                                     ),
                                     Expanded(
@@ -902,7 +903,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                       ),
                                     ),
                                     Icon(
-                                      Icons.brightness_high_outlined,
+                                      CupertinoIcons.sun_max,
                                       color: primaryColor,
                                     ),
                                   ],
@@ -1003,65 +1004,78 @@ class _ReaderScreenState extends State<ReaderScreen> {
               elevation: 0,
               iconTheme: IconThemeData(color: _textColor),
               actions: [
-                // Indicador Visual del Pomodoro
-                if (_isPomodoroActive)
-                  Center(
-                    child: Text(
-                      '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                        color:
-                            _isPomodoroBreak ? Colors.green : Colors.redAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      // Indicador Visual del Pomodoro
+                      if (_isPomodoroActive)
+                        Center(
+                          child: Text(
+                            '${(_pomodoroSeconds ~/ 60).toString().padLeft(2, '0')}:${(_pomodoroSeconds % 60).toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: _isPomodoroBreak
+                                  ? Colors.green
+                                  : Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      IconButton(
+                        icon: Icon(
+                          _isPomodoroActive
+                              ? CupertinoIcons.timer
+                              : CupertinoIcons.timer,
+                          color: _isPomodoroActive
+                              ? (_isPomodoroBreak
+                                  ? Colors.green
+                                  : Colors.redAccent)
+                              : _textColor,
+                        ),
+                        tooltip: 'Modo Enfoque (Pomodoro)',
+                        onPressed: _togglePomodoro,
                       ),
-                    ),
-                  ),
-                IconButton(
-                  icon: Icon(
-                    _isPomodoroActive ? Icons.timer : Icons.timer_outlined,
-                    color: _isPomodoroActive
-                        ? (_isPomodoroBreak ? Colors.green : Colors.redAccent)
-                        : _textColor,
-                  ),
-                  tooltip: 'Modo Enfoque (Pomodoro)',
-                  onPressed: _togglePomodoro,
-                ),
-                if (!widget.isPdf && !widget.isEpub)
-                  IconButton(
-                    icon: Icon(
-                      _isSpeaking
-                          ? Icons.stop_circle_outlined
-                          : Icons.volume_up_outlined,
-                    ),
-                    onPressed: _toggleTts,
-                  ),
-                // Botón de guardado, solo visible para PDFs locales
-                if (widget.isPdf &&
-                    widget.documentPath != null &&
-                    !widget.documentPath!.startsWith('http'))
-                  IconButton(
-                    icon: const Icon(Icons.save_outlined),
-                    tooltip: 'Guardar anotaciones',
-                    onPressed: _guardarAnotacionesPdf,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.bookmark_border),
-                  onPressed:
-                      _mostrarCitasFavoritas, // Abre el menú de favoritos
-                ),
-                IconButton(
-                  icon: const Icon(Icons.share_outlined),
-                  onPressed: () {
-                    final textoCompartir = widget.documentPath != null
-                        ? 'Estoy leyendo "${widget.titulo}" en OmniLibrary. ¡Échale un vistazo!'
-                        : 'Lectura recomendada: "${widget.titulo}".\n\nOmniLibrary App';
+                      if (!widget.isPdf && !widget.isEpub)
+                        IconButton(
+                          icon: Icon(
+                            _isSpeaking
+                                ? CupertinoIcons.speaker_slash
+                                : CupertinoIcons.speaker_3,
+                          ),
+                          onPressed: _toggleTts,
+                        ),
+                      // Botón de guardado, solo visible para PDFs locales
+                      if (widget.isPdf &&
+                          widget.documentPath != null &&
+                          !widget.documentPath!.startsWith('http'))
+                        IconButton(
+                          icon: const Icon(CupertinoIcons.arrow_down_doc),
+                          tooltip: 'Guardar anotaciones',
+                          onPressed: _guardarAnotacionesPdf,
+                        ),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.bookmark),
+                        onPressed:
+                            _mostrarCitasFavoritas, // Abre el menú de favoritos
+                      ),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.share),
+                        onPressed: () {
+                          final textoCompartir = widget.documentPath != null
+                              ? 'Estoy leyendo "${widget.titulo}" en OmniLibrary. ¡Échale un vistazo!'
+                              : 'Lectura recomendada: "${widget.titulo}".\n\nOmniLibrary App';
 
-                    Share.share(textoCompartir);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.tune), // Botón de ajustes avanzados
-                  onPressed: _mostrarAjustesAvanzados,
+                          Share.share(textoCompartir);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons
+                            .slider_horizontal_3), // Botón de ajustes avanzados
+                        onPressed: _mostrarAjustesAvanzados,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1078,11 +1092,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       () => _selectedPdfText = null,
                     ); // Ocultar el botón después de buscar
                   },
-                  icon: const Icon(Icons.language),
+                  icon: const Icon(CupertinoIcons.globe),
                   label: const Text('Definir en Wikipedia'),
                   backgroundColor: Theme.of(context).primaryColor,
                   foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-                )
+                ).animate().scale(duration: 300.ms, curve: Curves.easeOutBack)
               : null,
       // BARRA INFERIOR DE CONTROLES (Minimalista)
       // Ocultamos los controles si es un PDF, ya que manejan su propio flujo.
@@ -1111,7 +1125,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               children: [
                                 IconButton(
                                   icon: Icon(
-                                    Icons.text_decrease,
+                                    CupertinoIcons.minus_circle,
                                     color: _textColor,
                                   ),
                                   onPressed: () => setState(
@@ -1121,7 +1135,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 ),
                                 IconButton(
                                   icon: Icon(
-                                    Icons.text_increase,
+                                    CupertinoIcons.plus_circle,
                                     color: _textColor,
                                   ),
                                   onPressed: () => setState(
@@ -1131,23 +1145,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                 ),
                               ],
                             ),
-                            Row(
-                              children: [
-                                _ColorButton(
-                                  color: const Color(0xFFFFFFFF),
-                                  onTap: () => _cambiarTema('Blanco'),
-                                ),
-                                const SizedBox(width: 12),
-                                _ColorButton(
-                                  color: const Color(0xFFFBF0D9),
-                                  onTap: () => _cambiarTema('Amarillo'),
-                                ),
-                                const SizedBox(width: 12),
-                                _ColorButton(
-                                  color: const Color(0xFF000000),
-                                  onTap: () => _cambiarTema('Negro'),
-                                ),
-                              ],
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _ColorButton(
+                                    color: const Color(0xFFFFFFFF),
+                                    onTap: () => _cambiarTema('Blanco'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _ColorButton(
+                                    color: const Color(0xFFFBF0D9),
+                                    onTap: () => _cambiarTema('Amarillo'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _ColorButton(
+                                    color: const Color(0xFF000000),
+                                    onTap: () => _cambiarTema('Negro'),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -1207,7 +1224,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _isPomodoroBreak ? Icons.coffee : Icons.psychology,
+                          _isPomodoroBreak
+                              ? CupertinoIcons.moon_fill
+                              : CupertinoIcons.lightbulb_fill,
                           color: _isPomodoroBreak
                               ? Colors.green
                               : Colors.redAccent,
@@ -1230,7 +1249,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   ),
                 ),
-              ),
+              )
+                  .animate()
+                  .slideY(
+                      begin: -1,
+                      end: 0,
+                      duration: 400.ms,
+                      curve: Curves.easeOutBack)
+                  .fade(),
           ],
         ),
       ),
@@ -1696,7 +1722,7 @@ class _DiccionarioBottomSheetState extends State<_DiccionarioBottomSheet> {
                 Row(
                   children: [
                     Icon(
-                      Icons.language,
+                      CupertinoIcons.globe,
                       color: widget.textColor.withOpacity(0.5),
                     ),
                     const SizedBox(width: 10),

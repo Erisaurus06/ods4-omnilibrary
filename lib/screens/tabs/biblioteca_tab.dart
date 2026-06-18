@@ -64,84 +64,38 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
   }
 
   void _mostrarMenuDocumento(Map<String, dynamic> doc) {
-    showModalBottomSheet(
+    showCupertinoModalPopup(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: Container(
-            color: Theme.of(context).cardColor.withOpacity(0.85),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics()),
-                padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        doc['titulo']?.toString() ?? 'Sin título',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.book),
-                      title: const Text('Abrir documento'),
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.pop(context);
-                        _abrirLector(doc);
-                      },
-                    ),
-                    if (doc['esPdf'] == true && doc['path'] != null) ...[
-                      ListTile(
-                        leading: const Icon(CupertinoIcons.sparkles),
-                        title: const Text('Generar Flashcards con IA'),
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ],
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.delete,
-                          color: CupertinoColors.destructiveRed),
-                      title: const Text('Eliminar',
-                          style: TextStyle(
-                              color: CupertinoColors.destructiveRed,
-                              fontWeight: FontWeight.bold)),
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        Navigator.pop(context);
-                        _confirmarEliminacion(doc);
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(doc['titulo']?.toString() ?? 'Sin título',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              HapticFeedback.selectionClick(); // Regla 5: Haptics
+              Navigator.pop(ctx);
+              _abrirLector(doc);
+            },
+            child: const Text('Abrir documento'),
           ),
+          if (doc['esPdf'] == true && doc['path'] != null)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Generar Flashcards con IA'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDestructiveAction: true,
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            Navigator.pop(ctx);
+            _confirmarEliminacion(doc);
+          },
+          child: const Text('Eliminar documento',
+              style: TextStyle(fontWeight: FontWeight.w600)),
         ),
       ),
     );
@@ -186,6 +140,16 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
         break;
       }
     }
+
+    // Regla 4: Borrado inmediato del estado para compatibilidad fluida con Dismissible
+    if (mounted) {
+      setState(() {
+        _documentos.removeWhere((d) =>
+            d['path'] == targetDoc['path'] &&
+            d['titulo'] == targetDoc['titulo']);
+      });
+    }
+
     if (targetIndex != -1) {
       await LocalDbService.eliminarDocumento(targetIndex);
     }
@@ -207,7 +171,7 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
           ),
           margin: const EdgeInsets.all(16),
           elevation: 0,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -218,7 +182,6 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
     required bool esEpub,
     required List<String> extensiones,
   }) async {
-    Navigator.pop(context);
     try {
       FilePickerResult? resultado = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -262,83 +225,55 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
           child: const Icon(CupertinoIcons.add),
           onPressed: () {
             HapticFeedback.lightImpact();
-            showModalBottomSheet(
+            showCupertinoModalPopup(
               context: context,
-              backgroundColor: Colors.transparent,
-              isScrollControlled: true,
-              builder: (context) => ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(24)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                  child: Container(
-                    color: Theme.of(context).cardColor.withOpacity(0.85),
-                    padding: EdgeInsets.only(
-                        bottom: MediaQuery.of(context).viewInsets.bottom),
-                    child: SafeArea(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics()),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(height: 12),
-                            Container(
-                              width: 40,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                  color: Colors.grey.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(20.0),
-                              child: Text(
-                                'Añadir documento',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                              ),
-                            ),
-                            ListTile(
-                              leading: Icon(
-                                CupertinoIcons.doc_text,
-                                color: Theme.of(context).primaryColor,
-                              ),
-                              title: Text(
-                                'Añadir PDF',
-                                style: TextStyle(
-                                    color: Theme.of(context).primaryColor),
-                              ),
-                              onTap: () => _agregarArchivoLocal(
-                                esPdf: true,
-                                esEpub: false,
-                                extensiones: ['pdf'],
-                              ),
-                            ),
-                            ListTile(
-                              leading: Icon(
-                                CupertinoIcons.book,
-                                color: Theme.of(context).primaryColor,
-                              ),
-                              title: Text(
-                                'Añadir Libro (ePub)',
-                                style: TextStyle(
-                                    color: Theme.of(context).primaryColor),
-                              ),
-                              onTap: () => _agregarArchivoLocal(
-                                esPdf: false,
-                                esEpub: true,
-                                extensiones: ['epub'],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
+              builder: (ctx) => CupertinoActionSheet(
+                title: const Text('Añadir a mi Biblioteca',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                actions: [
+                  CupertinoActionSheetAction(
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.pop(ctx);
+                      _agregarArchivoLocal(
+                        esPdf: true,
+                        esEpub: false,
+                        extensiones: ['pdf'],
+                      );
+                    },
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.doc_text),
+                        SizedBox(width: 8),
+                        Text('Importar PDF')
+                      ],
                     ),
                   ),
+                  CupertinoActionSheetAction(
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.pop(ctx);
+                      _agregarArchivoLocal(
+                        esPdf: false,
+                        esEpub: true,
+                        extensiones: ['epub'],
+                      );
+                    },
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.book),
+                        SizedBox(width: 8),
+                        Text('Importar Libro (ePub)')
+                      ],
+                    ),
+                  ),
+                ],
+                cancelButton: CupertinoActionSheetAction(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
             );
@@ -361,7 +296,8 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
             backgroundColor: Colors.transparent,
             flexibleSpace: ClipRRect(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                filter: ImageFilter.blur(
+                    sigmaX: 25, sigmaY: 25), // Regla 1: Cristal Esmerilado
                 child: FlexibleSpaceBar(
                   titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
                   title: Text(
@@ -393,30 +329,14 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-              child: ClipRRect(
+              child: CupertinoSearchTextField(
+                onChanged: (val) => setState(() => _searchQuery = val),
+                placeholder: 'Buscar en mi biblioteca...',
+                style: TextStyle(
+                    color: Theme.of(context).primaryColor, fontSize: 17),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey.shade800.withOpacity(0.6)
-                          : Colors.grey.shade300.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextField(
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      decoration: const InputDecoration(
-                        icon: Icon(CupertinoIcons.search,
-                            color: CupertinoColors.systemGrey, size: 20),
-                        hintText: 'Buscar en mi biblioteca...',
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -447,10 +367,11 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                         'Tu biblioteca está vacía',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 20, // Ajuste iOS
                           fontWeight: FontWeight.w600,
                           color:
                               Theme.of(context).primaryColor.withOpacity(0.6),
+                          letterSpacing: -0.5,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -463,8 +384,9 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                         'Toca el botón + para añadir.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
+                          fontSize: 15,
                           color:
-                              Theme.of(context).primaryColor.withOpacity(0.4),
+                              Theme.of(context).primaryColor.withOpacity(0.5),
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -489,82 +411,98 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           final doc = documentos[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12.0),
-            child: Container(
+          return Dismissible(
+            key: Key('doc_${doc['path']}_${doc['titulo']}'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              margin: const EdgeInsets.only(bottom: 12.0),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 24),
               decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.black.withOpacity(0.05),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 15,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                color: CupertinoColors.destructiveRed,
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+              child: const Icon(CupertinoIcons.delete,
+                  color: Colors.white, size: 28),
+            ),
+            onDismissed: (direction) {
+              HapticFeedback.mediumImpact(); // Regla 5
+              _borrarDocumento(doc);
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(20), // Regla 3: Squarcles
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black
+                          .withOpacity(0.04), // Regla 3: Sombra Suave
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                leading: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(10),
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        doc['esPdf'] == true
+                            ? CupertinoIcons.doc_text
+                            : CupertinoIcons.book,
+                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                      ),
+                    ),
+                    title: Text(
+                      doc['titulo']?.toString() ?? 'Sin título',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17, // Tamaño nativo de lista iOS
+                        letterSpacing: -0.3,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      'Local',
+                      style: TextStyle(
+                        color: Theme.of(context).primaryColor.withOpacity(0.5),
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Icon(
+                      CupertinoIcons.chevron_right,
+                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                    ),
+                    onTap: () {
+                      HapticFeedback.lightImpact(); // Regla 5
+                      _abrirLector(doc);
+                    },
+                    onLongPress: () {
+                      HapticFeedback.selectionClick();
+                      _mostrarMenuDocumento(doc);
+                    },
                   ),
-                  child: Icon(
-                    doc['esPdf'] == true
-                        ? CupertinoIcons.doc_text
-                        : CupertinoIcons.book,
-                    color: Theme.of(context).primaryColor.withOpacity(0.6),
-                  ),
                 ),
-                title: Text(
-                  doc['titulo']?.toString() ?? 'Sin título',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: Theme.of(context).primaryColor,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  'Local',
-                  style: TextStyle(
-                    color: Theme.of(context).primaryColor.withOpacity(0.6),
-                    fontSize: 13,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Icon(
-                  CupertinoIcons.chevron_right,
-                  color: Theme.of(context).primaryColor.withOpacity(0.3),
-                ),
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  _abrirLector(doc);
-                },
-                onLongPress: () {
-                  HapticFeedback.mediumImpact();
-                  _mostrarMenuDocumento(doc);
-                },
               ),
             ),
-          )
-              .animate()
-              .fade(duration: 300.ms)
-              .slideX(begin: 0.05, end: 0, delay: (index % 15 * 30).ms);
+          ).animate().fade(duration: 300.ms);
         }, childCount: documentos.length),
       ),
     );
@@ -600,12 +538,12 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                     doc['titulo']?.toString() ?? 'Sin título',
                   ),
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(20), // Regla 3: Squarcles
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(0.04), // Regla 3
                     blurRadius: 20,
-                    offset: const Offset(0, 4),
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
@@ -656,7 +594,7 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                               maxLines: 4,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 16,
                                 color: Colors.white,
                                 height: 1.2,

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:light/light.dart';
@@ -126,8 +127,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(CupertinoIcons.lock,
-                      size: 80, color: CupertinoColors.systemGrey),
+                  const Icon(
+                    CupertinoIcons.lock_fill,
+                    size: 80,
+                    color: CupertinoColors.systemGrey,
+                  )
+                      .animate()
+                      .scale(duration: 500.ms, curve: Curves.easeOutBack),
                   const SizedBox(height: 24),
                   Row(
                     children: [
@@ -145,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ],
-                  ),
+                  ).animate().fade(delay: 200.ms).slideY(begin: 0.2, end: 0),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
@@ -162,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
+                  ).animate().fade(delay: 400.ms).slideY(begin: 0.2, end: 0),
                 ],
               ),
             ),
@@ -173,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(index: _indiceActual, children: _pantallas),
+      body: _FadeIndexedStack(index: _indiceActual, children: _pantallas),
       bottomNavigationBar: ClipRRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
@@ -277,6 +283,55 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Widget personalizado para animar suavemente el cambio entre pestañas en el HomeScreen
+/// sin perder el estado de la vista anterior (como ocurriría con AnimatedSwitcher normal).
+class _FadeIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  const _FadeIndexedStack({required this.index, required this.children});
+
+  @override
+  __FadeIndexedStackState createState() => __FadeIndexedStackState();
+}
+
+class __FadeIndexedStackState extends State<_FadeIndexedStack>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 300));
+    _controller.forward();
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(_FadeIndexedStack oldWidget) {
+    if (widget.index != oldWidget.index) {
+      _controller.forward(from: 0.0);
+    }
+    super.didUpdateWidget(oldWidget);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: IndexedStack(
+        index: widget.index,
+        children: widget.children,
       ),
     );
   }

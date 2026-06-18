@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -20,19 +21,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'title': 'Tu Segunda Memoria',
       'subtitle':
           'Captura ideas al vuelo, crea apuntes enriquecidos y organiza tu conocimiento de forma natural.',
-      'icon': Icons.auto_awesome_mosaic_rounded,
+      'icon': CupertinoIcons.square_grid_2x2,
     },
     {
       'title': 'Estudio Inteligente',
       'subtitle':
           'Genera flashcards con IA, utiliza repetición espaciada y mantén el enfoque con el temporizador Pomodoro.',
-      'icon': Icons.psychology_rounded,
+      'icon': CupertinoIcons.lightbulb_fill,
     },
     {
       'title': 'Biblioteca Universal',
       'subtitle':
           'Lee tus ePubs y PDFs favoritos con herramientas de marcado profesional, diccionarios y modo nocturno.',
-      'icon': Icons.library_books_rounded,
+      'icon': CupertinoIcons.book_solid,
     },
   ];
 
@@ -57,8 +58,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const AuthScreen(),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
+              return FadeTransition(opacity: animation, child: child);
+            },
             transitionDuration: const Duration(milliseconds: 800),
           ),
         );
@@ -132,23 +133,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             color: primaryColor,
                           ),
                         ).animate().scale(
-                          duration: 500.ms,
-                          curve: Curves.easeOutBack,
-                        ),
+                              duration: 500.ms,
+                              curve: Curves.easeOutBack,
+                            ),
 
                         const SizedBox(height: 60),
 
                         // Título
                         Text(
-                              page['title'],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -1.0,
-                                color: primaryColor,
-                              ),
-                            )
+                          page['title'],
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1.0,
+                            color: primaryColor,
+                          ),
+                        )
                             .animate()
                             .fade(delay: 200.ms)
                             .slideY(begin: 0.2, end: 0),
@@ -157,14 +158,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                         // Subtítulo
                         Text(
-                              page['subtitle'],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 16,
-                                height: 1.5,
-                                color: primaryColor.withOpacity(0.6),
-                              ),
-                            )
+                          page['subtitle'],
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            height: 1.5,
+                            color: primaryColor.withOpacity(0.6),
+                          ),
+                        )
                             .animate()
                             .fade(delay: 400.ms)
                             .slideY(begin: 0.2, end: 0),

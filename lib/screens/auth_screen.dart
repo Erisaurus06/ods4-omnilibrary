@@ -1,6 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../services/supabase_service.dart';
+import '../services/biometric_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -21,6 +24,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = true);
     try {
       if (_isLogin) {
+        // Integración de seguridad biométrica antes de iniciar sesión
+        final isAuthenticated = await BiometricService.authenticate();
+        if (!isAuthenticated) {
+          throw Exception('Autenticación biométrica cancelada o fallida.');
+        }
+
         await SupabaseService.client.auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
@@ -44,14 +53,29 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } on AuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text(e.message,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ocurrió un error inesperado.'),
-            backgroundColor: Colors.redAccent,
+          SnackBar(
+            content: Text(
+              e.toString().contains('Exception:')
+                  ? e.toString().replaceAll('Exception: ', '')
+                  : 'Ocurrió un error inesperado.',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: Colors.red.shade700,
           ),
         );
       }
@@ -62,11 +86,24 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _socialLogin(OAuthProvider provider) async {
     try {
+      // Integración de seguridad biométrica antes de iniciar sesión social
+      final isAuthenticated = await BiometricService.authenticate();
+      if (!isAuthenticated) {
+        throw Exception('Autenticación biométrica cancelada o fallida.');
+      }
       await SupabaseService.client.auth.signInWithOAuth(provider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al conectar con proveedor: $e')),
+          SnackBar(
+            content: Text(
+                'Error de autenticación: ${e.toString().replaceAll('Exception: ', '')}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: Colors.red.shade700,
+          ),
         );
       }
     }
@@ -87,7 +124,9 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.auto_stories_rounded, size: 80, color: primaryColor),
+                Icon(CupertinoIcons.book_solid, size: 80, color: primaryColor)
+                    .animate()
+                    .scale(duration: 600.ms, curve: Curves.easeOutBack),
                 const SizedBox(height: 24),
                 Text(
                   _isLogin ? 'Bienvenido de\nvuelta' : 'Crea tu\ncuenta',
@@ -99,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     height: 1.1,
                     color: primaryColor,
                   ),
-                ),
+                ).animate().fade(delay: 200.ms).slideY(begin: 0.2, end: 0),
                 const SizedBox(height: 12),
                 Text(
                   'OmniLibrary te conecta con el conocimiento del mundo.',
@@ -108,7 +147,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     fontSize: 15,
                     color: primaryColor.withOpacity(0.6),
                   ),
-                ),
+                ).animate().fade(delay: 300.ms).slideY(begin: 0.2, end: 0),
                 const SizedBox(height: 40),
                 // Campos de texto estilo iOS
                 TextField(
@@ -117,7 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   decoration: InputDecoration(
                     hintText: 'Correo electrónico',
                     prefixIcon: Icon(
-                      Icons.email_outlined,
+                      CupertinoIcons.mail,
                       color: primaryColor.withOpacity(0.5),
                     ),
                     filled: true,
@@ -128,7 +167,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       borderSide: BorderSide.none,
                     ),
                   ),
-                ),
+                ).animate().fade(delay: 400.ms).slideX(begin: 0.05, end: 0),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
@@ -136,14 +175,14 @@ class _AuthScreenState extends State<AuthScreen> {
                   decoration: InputDecoration(
                     hintText: 'Contraseña',
                     prefixIcon: Icon(
-                      Icons.lock_outline,
+                      CupertinoIcons.lock,
                       color: primaryColor.withOpacity(0.5),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
+                            ? CupertinoIcons.eye_slash
+                            : CupertinoIcons.eye,
                         color: primaryColor.withOpacity(0.5),
                       ),
                       onPressed: () =>
@@ -157,7 +196,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       borderSide: BorderSide.none,
                     ),
                   ),
-                ),
+                ).animate().fade(delay: 500.ms).slideX(begin: 0.05, end: 0),
                 const SizedBox(height: 24),
                 // Botón principal de autenticación
                 SizedBox(
@@ -190,7 +229,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                   ),
-                ),
+                ).animate().fade(delay: 600.ms).slideY(begin: 0.2, end: 0),
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -211,7 +250,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       child: Divider(color: primaryColor.withOpacity(0.2)),
                     ),
                   ],
-                ),
+                ).animate().fade(delay: 700.ms),
                 const SizedBox(height: 24),
                 // Botones Sociales OAuth
                 Wrap(
@@ -273,7 +312,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       },
                     ),
                   ],
-                ),
+                )
+                    .animate()
+                    .fade(delay: 800.ms)
+                    .scale(begin: const Offset(0.95, 0.95)),
                 const SizedBox(height: 40),
                 // Alternar vista entre Login / Registro
                 Row(
@@ -294,7 +336,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ),
                   ],
-                ),
+                ).animate().fade(delay: 900.ms),
               ],
             ),
           ),

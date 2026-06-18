@@ -157,7 +157,7 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                               ),
                               decoration: InputDecoration(
                                 icon: Icon(
-                                  Icons.folder,
+                                  CupertinoIcons.folder_fill,
                                   color: Theme.of(
                                     context,
                                   ).primaryColor.withOpacity(0.5),
@@ -315,6 +315,8 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
     String selectedColor =
         notaExistente?['color'] ?? '0xFFFBF0D9'; // Sepia por defecto
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -323,9 +325,9 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25), // Regla 1: Cristal Esmerilado
             child: Container(
-              color: Theme.of(context).cardColor.withOpacity(0.95),
+              color: isDark ? Colors.black.withOpacity(0.75) : Colors.white.withOpacity(0.75), // Regla 1
               height: MediaQuery.of(context).size.height * 0.93,
               child: SafeArea(
                 child: StatefulBuilder(
@@ -341,19 +343,24 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                             children: [
                               CupertinoButton(
                                 padding: EdgeInsets.zero,
-                                onPressed: () => Navigator.pop(context),
+                                onPressed: () {
+                                  HapticFeedback.lightImpact(); // Regla 5: Haptics
+                                  Navigator.pop(context);
+                                },
                                 child: const Text('Cancelar',
                                     style: TextStyle(
-                                        color: CupertinoColors.destructiveRed)),
+                                        color: CupertinoColors.destructiveRed,
+                                        fontSize: 17)),
                               ),
-                              const Text('Apunte de Estudio',
+                              Text(notaExistente != null ? 'Editar Apunte' : 'Nuevo Apunte',
                                   style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 17)),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 17,
+                                      color: Theme.of(context).primaryColor)),
                               CupertinoButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
-                                  HapticFeedback.lightImpact();
+                                  HapticFeedback.mediumImpact(); // Regla 5: Haptics
                                   final uuid = notaExistente?['id'] ??
                                       DateTime.now()
                                           .millisecondsSinceEpoch
@@ -371,9 +378,9 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                                       'color': selectedColor,
                                       'fecha': DateTime.now().toIso8601String(),
                                     };
-                                    if (notaExistente != null &&
-                                        index != null) {
-                                      _misNotas[index] = nuevaNota;
+                                    final existingIndex = _misNotas.indexWhere((n) => n['id'] == uuid);
+                                    if (existingIndex != -1) {
+                                      _misNotas[existingIndex] = nuevaNota;
                                     } else {
                                       _misNotas.insert(0, nuevaNota);
                                     }
@@ -381,46 +388,35 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                                   LocalDbService.guardarNotas(_misNotas);
                                   Navigator.pop(context);
                                 },
-                                child: const Text('Guardar',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.bold)),
+                                child: Text(notaExistente != null ? 'Guardar' : 'Agregar',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 17,
+                                        color: CupertinoColors.activeBlue)),
                               ),
                             ],
                           ),
                         ),
-                        const Divider(height: 1),
+                        Container(height: 0.5, color: Colors.grey.withOpacity(0.3)),
                         // Barra de herramientas Rich Text
                         Container(
                           height: 50,
-                          color:
-                              Theme.of(context).primaryColor.withOpacity(0.05),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey.shade900.withOpacity(0.5) : Colors.grey.shade200.withOpacity(0.5),
+                            border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.3), width: 0.5)),
+                          ),
                           child: ListView(
                             scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
+                            physics: const BouncingScrollPhysics(), // Regla 4: Bouncing Scroll
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             children: [
-                              IconButton(
-                                  icon: const Icon(CupertinoIcons.bold),
-                                  onPressed: () =>
-                                      HapticFeedback.lightImpact()),
-                              IconButton(
-                                  icon: const Icon(CupertinoIcons.italic),
-                                  onPressed: () =>
-                                      HapticFeedback.lightImpact()),
-                              IconButton(
-                                  icon: const Icon(CupertinoIcons.underline),
-                                  onPressed: () =>
-                                      HapticFeedback.lightImpact()),
-                              const VerticalDivider(indent: 10, endIndent: 10),
-                              IconButton(
-                                  icon: const Icon(CupertinoIcons.list_bullet),
-                                  onPressed: () =>
-                                      HapticFeedback.lightImpact()),
-                              IconButton(
-                                  icon: const Icon(CupertinoIcons.list_number),
-                                  onPressed: () =>
-                                      HapticFeedback.lightImpact()),
-                              const VerticalDivider(indent: 10, endIndent: 10),
+                              CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 12), onPressed: () => HapticFeedback.selectionClick(), child: Icon(CupertinoIcons.bold, color: Theme.of(context).primaryColor, size: 22)),
+                              CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 12), onPressed: () => HapticFeedback.selectionClick(), child: Icon(CupertinoIcons.italic, color: Theme.of(context).primaryColor, size: 22)),
+                              CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 12), onPressed: () => HapticFeedback.selectionClick(), child: Icon(CupertinoIcons.underline, color: Theme.of(context).primaryColor, size: 22)),
+                              Padding(padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0), child: Container(width: 1, color: Colors.grey.withOpacity(0.4))),
+                              CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 12), onPressed: () => HapticFeedback.selectionClick(), child: Icon(CupertinoIcons.list_bullet, color: Theme.of(context).primaryColor, size: 22)),
+                              CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 12), onPressed: () => HapticFeedback.selectionClick(), child: Icon(CupertinoIcons.list_number, color: Theme.of(context).primaryColor, size: 22)),
+                              Padding(padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0), child: Container(width: 1, color: Colors.grey.withOpacity(0.4))),
                               ...[
                                 '0xFFFBF0D9', // Sepia
                                 '0xFFFFFFFF', // Blanco
@@ -431,24 +427,29 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                                 final isSelected = selectedColor == colorHex;
                                 return GestureDetector(
                                   onTap: () {
-                                    HapticFeedback.lightImpact();
+                                    HapticFeedback.selectionClick(); // Regla 5: Haptics
                                     setModalState(
                                         () => selectedColor = colorHex);
                                   },
                                   child: Container(
                                     margin: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 10),
+                                        horizontal: 6, vertical: 12),
                                     width: 30,
                                     height: 30,
                                     decoration: BoxDecoration(
                                       color: Color(int.parse(colorHex)),
-                                      shape: BoxShape.circle,
+                                      shape: BoxShape.circle, // Regla 3: Formas
                                       border: Border.all(
-                                        color: isSelected
-                                            ? Theme.of(context).primaryColor
-                                            : Colors.grey.withOpacity(0.3),
-                                        width: isSelected ? 2 : 1,
+                                        color: isSelected ? CupertinoColors.activeBlue : Colors.grey.withOpacity(0.3),
+                                        width: isSelected ? 2.5 : 1,
                                       ),
+                                      boxShadow: isSelected ? [
+                                        BoxShadow(
+                                          color: CupertinoColors.activeBlue.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ] : null,
                                     ),
                                   ),
                                 );
@@ -456,18 +457,18 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                             ],
                           ),
                         ),
-                        const Divider(height: 1),
                         // Editor de texto (Rich Text simulado)
                         Expanded(
                           child: Container(
                             color: Color(int.parse(selectedColor)),
+                            width: double.infinity,
                             child: SingleChildScrollView(
                               physics: const BouncingScrollPhysics(
-                                  parent: AlwaysScrollableScrollPhysics()),
+                                  parent: AlwaysScrollableScrollPhysics()), // Regla 4: Bouncing Physics
                               padding: EdgeInsets.only(
                                 left: 24,
                                 right: 24,
-                                top: 24,
+                                top: 32,
                                 bottom:
                                     MediaQuery.of(context).viewInsets.bottom +
                                         100,
@@ -478,14 +479,16 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                                   TextField(
                                     controller: titleCtrl,
                                     style: const TextStyle(
-                                      fontSize: 28,
+                                      fontSize: 32, // Regla 2: Large Titles
                                       fontWeight: FontWeight.w800,
                                       color: Colors.black87,
+                                      letterSpacing: -0.5,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText: 'Título de la libreta',
+                                      hintText: 'Título del apunte',
                                       hintStyle: TextStyle(
-                                          color: Colors.black.withOpacity(0.3)),
+                                          color: Colors.black.withOpacity(0.3),
+                                          fontWeight: FontWeight.w800),
                                       border: InputBorder.none,
                                       isDense: true,
                                     ),
@@ -498,8 +501,9 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                                     controller: contentCtrl,
                                     style: const TextStyle(
                                       fontSize: 18,
-                                      height: 1.6,
+                                      height: 1.5,
                                       color: Colors.black87,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                     decoration: InputDecoration(
                                       hintText:
@@ -652,7 +656,7 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                     child: Text(
                       mazo,
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).primaryColor,
                       ),
@@ -821,17 +825,19 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                     color: CupertinoColors.activeGreen.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(CupertinoIcons.checkmark_circle_fill,
+                      const Icon(CupertinoIcons.checkmark_circle_fill,
                           color: Colors.white, size: 50),
-                      SizedBox(height: 8),
-                      Text('Fácil',
-                          style: TextStyle(
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: const Text('Fácil',
+                            style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 18)),
+                      ),
                     ],
                   ),
                 ),
@@ -842,17 +848,19 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                     color: CupertinoColors.destructiveRed.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(CupertinoIcons.xmark_circle_fill,
+                      const Icon(CupertinoIcons.xmark_circle_fill,
                           color: Colors.white, size: 50),
-                      SizedBox(height: 8),
-                      Text('Difícil',
-                          style: TextStyle(
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: const Text('Difícil',
+                            style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 18)),
+                      ),
                     ],
                   ),
                 ),

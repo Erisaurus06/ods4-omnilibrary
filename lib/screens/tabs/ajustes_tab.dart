@@ -2,10 +2,13 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/local_db_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/biometric_service.dart';
+import '../../services/light_sensor_service.dart';
 
 class AjustesTab extends StatefulWidget {
   const AjustesTab({super.key});
@@ -15,6 +18,10 @@ class AjustesTab extends StatefulWidget {
 
 class _AjustesTabState extends State<AjustesTab> {
   bool _modoLectura = true;
+  bool _bloqueoApp = false;
+  bool _brilloAdaptable = true;
+  Color _accentColor = CupertinoColors.activeBlue;
+
   String _cacheSize = 'Calculando...';
 
   @override
@@ -31,6 +38,26 @@ class _AjustesTabState extends State<AjustesTab> {
         _cacheSize = '0 MB';
       }
     });
+  }
+
+  void _toggleBiometria(bool val) async {
+    HapticFeedback.mediumImpact();
+    if (val) {
+      final autenticado = await BiometricService.authenticate();
+      if (mounted) setState(() => _bloqueoApp = autenticado);
+    } else {
+      if (mounted) setState(() => _bloqueoApp = false);
+    }
+  }
+
+  void _toggleBrilloAdaptable(bool val) {
+    HapticFeedback.lightImpact();
+    setState(() => _brilloAdaptable = val);
+    if (val) {
+      LightSensorService().startListening();
+    } else {
+      LightSensorService().stopListening();
+    }
   }
 
   @override
@@ -51,15 +78,16 @@ class _AjustesTabState extends State<AjustesTab> {
               backgroundColor: Colors.transparent,
               flexibleSpace: ClipRRect(
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                  filter: ImageFilter.blur(
+                      sigmaX: 25, sigmaY: 25), // Regla 1: Glassmorphism
                   child: FlexibleSpaceBar(
                     titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
                     title: Text(
-                      'Configuración',
+                      'Ajustes',
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: 34, // Regla 2: Large Titles
                         fontWeight: FontWeight.w800,
-                        letterSpacing: -1.0,
+                        letterSpacing: -1.2,
                         color: Theme.of(context).primaryColor,
                       ),
                     ),
@@ -75,7 +103,8 @@ class _AjustesTabState extends State<AjustesTab> {
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius:
+                          BorderRadius.circular(20), // Regla 3: Squarcles
                       border: Border.all(
                         color: isDark
                             ? Colors.white.withOpacity(0.1)
@@ -86,7 +115,7 @@ class _AjustesTabState extends State<AjustesTab> {
                         BoxShadow(
                           color: Colors.black.withOpacity(0.04),
                           blurRadius: 20,
-                          offset: const Offset(0, 4),
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -94,11 +123,12 @@ class _AjustesTabState extends State<AjustesTab> {
                       children: [
                         CircleAvatar(
                           radius: 36,
-                          backgroundColor: Theme.of(context).primaryColor,
+                          backgroundColor:
+                              Theme.of(context).primaryColor.withOpacity(0.1),
                           child: Icon(
-                            Icons.person,
+                            CupertinoIcons.person_solid,
                             size: 36,
-                            color: Theme.of(context).scaffoldBackgroundColor,
+                            color: Theme.of(context).primaryColor,
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -110,7 +140,8 @@ class _AjustesTabState extends State<AjustesTab> {
                                 'Mi Cuenta',
                                 style: TextStyle(
                                   fontSize: 22,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
                                   color: Theme.of(context).primaryColor,
                                 ),
                                 maxLines: 1,
@@ -135,14 +166,32 @@ class _AjustesTabState extends State<AjustesTab> {
                         ),
                       ],
                     ),
-                  ),
+                  )
+                      .animate()
+                      .fade(duration: 400.ms)
+                      .slideY(begin: 0.05, end: 0),
                   const SizedBox(height: 36),
-                  _buildSectionHeader('APARIENCIA'),
+                  _buildSectionHeader('SEGURIDAD Y PRIVACIDAD')
+                      .animate()
+                      .fade(delay: 100.ms),
                   _buildSettingsCard(context, [
-                    _SwitchTile(
+                    _CupertinoSwitchTile(
+                      titulo: 'Bloqueo de App (Face ID)',
+                      icono: CupertinoIcons.lock_shield_fill,
+                      colorFondoIcono: CupertinoColors.systemGreen,
+                      valor: _bloqueoApp,
+                      onChanged: _toggleBiometria,
+                    ),
+                  ]).animate().fade(delay: 150.ms).slideY(begin: 0.05, end: 0),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader('APARIENCIA')
+                      .animate()
+                      .fade(delay: 200.ms),
+                  _buildSettingsCard(context, [
+                    _CupertinoSwitchTile(
                       titulo: 'Modo Oscuro',
-                      subtitulo: 'Cambia el tema visual',
-                      icono: Icons.dark_mode_rounded,
+                      icono: CupertinoIcons.moon_fill,
+                      colorFondoIcono: CupertinoColors.systemIndigo,
                       valor: themeProvider.isDarkMode,
                       onChanged: (val) {
                         HapticFeedback.lightImpact();
@@ -150,24 +199,36 @@ class _AjustesTabState extends State<AjustesTab> {
                       },
                     ),
                     _buildDivider(context),
-                    _SwitchTile(
+                    _CupertinoSwitchTile(
+                      titulo: 'Brillo Adaptable',
+                      icono: CupertinoIcons.brightness_solid,
+                      colorFondoIcono: CupertinoColors.systemYellow,
+                      valor: _brilloAdaptable,
+                      onChanged: _toggleBrilloAdaptable,
+                    ),
+                    _buildDivider(context),
+                    _CupertinoSwitchTile(
                       titulo: 'Modo Lectura',
-                      subtitulo: 'Optimiza el contraste y fuentes',
-                      icono: Icons.menu_book_rounded,
+                      icono: CupertinoIcons.book_fill,
+                      colorFondoIcono: CupertinoColors.systemOrange,
                       valor: _modoLectura,
                       onChanged: (val) {
                         HapticFeedback.lightImpact();
                         setState(() => _modoLectura = val);
                       },
                     ),
-                  ]),
+                    _buildDivider(context),
+                    _buildColorModifier(),
+                  ]).animate().fade(delay: 250.ms).slideY(begin: 0.05, end: 0),
                   const SizedBox(height: 32),
-                  _buildSectionHeader('ALMACENAMIENTO Y DATOS'),
+                  _buildSectionHeader('ALMACENAMIENTO Y DATOS')
+                      .animate()
+                      .fade(delay: 300.ms),
                   _buildSettingsCard(context, [
                     _ActionTile(
                       titulo: 'Espacio Ocupado',
-                      icono: Icons.storage_rounded,
-                      colorIcono: Colors.green,
+                      icono: CupertinoIcons.device_phone_portrait,
+                      colorIcono: CupertinoColors.systemBlue,
                       trailingText: _cacheSize,
                       onTap: () {
                         HapticFeedback.lightImpact();
@@ -176,8 +237,8 @@ class _AjustesTabState extends State<AjustesTab> {
                     _buildDivider(context),
                     _ActionTile(
                       titulo: 'Borrar Caché Local',
-                      icono: Icons.delete_sweep_rounded,
-                      colorIcono: CupertinoColors.destructiveRed,
+                      icono: CupertinoIcons.trash_fill,
+                      colorIcono: CupertinoColors.systemRed,
                       onTap: () async {
                         HapticFeedback.mediumImpact();
                         await LocalDbService.limpiarCache();
@@ -191,7 +252,7 @@ class _AjustesTabState extends State<AjustesTab> {
                           );
                       },
                     ),
-                  ]),
+                  ]).animate().fade(delay: 350.ms).slideY(begin: 0.05, end: 0),
                 ],
               ),
             ),
@@ -201,14 +262,13 @@ class _AjustesTabState extends State<AjustesTab> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 8),
+      padding: const EdgeInsets.only(left: 16, bottom: 10),
       child: Text(
         title,
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: Colors.grey,
-          letterSpacing: 1.2,
+          color: CupertinoColors.systemGrey,
         ),
       ),
     );
@@ -219,7 +279,7 @@ class _AjustesTabState extends State<AjustesTab> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
               ? Colors.white.withOpacity(0.1)
@@ -229,8 +289,8 @@ class _AjustesTabState extends State<AjustesTab> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -242,58 +302,128 @@ class _AjustesTabState extends State<AjustesTab> {
   Widget _buildDivider(BuildContext context) {
     return Divider(
       height: 1,
-      indent: 56,
+      indent: 64,
       color: Theme.of(context).dividerColor.withOpacity(0.5),
+    );
+  }
+
+  Widget _buildColorModifier() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemTeal,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              CupertinoIcons.paintbrush_fill,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Text(
+              'Color de Acento',
+              style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 17,
+                  letterSpacing: -0.3),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoColors.activeBlue,
+                CupertinoColors.systemPurple,
+                CupertinoColors.systemRed,
+                CupertinoColors.systemGreen,
+              ].map((color) {
+                final isSelected = _accentColor == color;
+                return GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _accentColor = color);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(left: 8),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? Theme.of(context).primaryColor
+                            : Colors.transparent,
+                        width: isSelected ? 2 : 0,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SwitchTile extends StatelessWidget {
+class _CupertinoSwitchTile extends StatelessWidget {
   final String titulo;
-  final String subtitulo;
   final IconData icono;
+  final Color colorFondoIcono;
   final bool valor;
   final Function(bool) onChanged;
-  const _SwitchTile({
+
+  const _CupertinoSwitchTile({
     required this.titulo,
-    required this.subtitulo,
     required this.icono,
+    required this.colorFondoIcono,
     required this.valor,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile.adaptive(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      activeColor: Theme.of(context).primaryColor,
-      title: Text(
-        titulo,
-        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: colorFondoIcono,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icono, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              titulo,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 17,
+                  letterSpacing: -0.3),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          CupertinoSwitch(
+            value: valor,
+            activeColor: CupertinoColors.activeGreen,
+            onChanged: onChanged,
+          ),
+        ],
       ),
-      subtitle: Text(
-        subtitulo,
-        style: TextStyle(
-          fontSize: 13,
-          color: Theme.of(context).primaryColor.withOpacity(0.6),
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      secondary: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icono,
-          color: Theme.of(context).scaffoldBackgroundColor,
-          size: 20,
-        ),
-      ),
-      value: valor,
-      onChanged: onChanged,
     );
   }
 }
@@ -314,37 +444,51 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: colorIcono,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icono, color: Colors.white, size: 20),
-      ),
-      title: Text(
-        titulo,
-        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (trailingText != null)
-            Flexible(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: colorIcono,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icono, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Text(
-                trailingText!,
-                style: const TextStyle(color: Colors.grey, fontSize: 15),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                titulo,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 17,
+                    letterSpacing: -0.3),
               ),
             ),
-          if (trailingText != null) const SizedBox(width: 4),
-          Icon(Icons.chevron_right, color: Colors.grey.withOpacity(0.5)),
-        ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (trailingText != null)
+                  Flexible(
+                    child: Text(
+                      trailingText!,
+                      style: const TextStyle(
+                          color: CupertinoColors.systemGrey, fontSize: 17),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (trailingText != null) const SizedBox(width: 4),
+                Icon(CupertinoIcons.chevron_forward,
+                    color: Colors.grey.withOpacity(0.5), size: 20),
+              ],
+            ),
+          ],
+        ),
       ),
-      onTap: onTap,
     );
   }
 }
