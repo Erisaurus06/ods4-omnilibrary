@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/local_db_service.dart';
 
 Map<String, dynamic> _procesarNotasEnFondo(Map<String, dynamic> data) {
@@ -352,6 +353,25 @@ class _ApuntesTabState extends State<ApuntesTab> {
                         apunteExistente: apunte,
                         index: index,
                       );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      CupertinoIcons.share,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                    title: Text(
+                      'Exportar como Texto',
+                      style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.pop(context);
+                      final texto =
+                          '${apunte['titulo'] ?? 'Sin título'}\n\n${apunte['contenido'] ?? ''}';
+                      Share.share(texto, subject: apunte['titulo']);
                     },
                   ),
                   ListTile(

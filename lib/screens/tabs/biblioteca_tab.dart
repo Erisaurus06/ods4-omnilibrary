@@ -133,7 +133,7 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                       onTap: () {
                         HapticFeedback.mediumImpact();
                         Navigator.pop(context);
-                        _borrarDocumento(doc);
+                        _confirmarEliminacion(doc);
                       },
                     ),
                     const SizedBox(height: 20),
@@ -143,6 +143,35 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmarEliminacion(Map<String, dynamic> doc) {
+    showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Eliminar Documento'),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar "${doc['titulo']?.toString() ?? 'este documento'}"?\nEsta acción no se puede deshacer.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar',
+                style: TextStyle(color: CupertinoColors.systemBlue)),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.pop(ctx);
+              _borrarDocumento(doc);
+            },
+            child: const Text('Eliminar',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -166,9 +195,18 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
         SnackBar(
           content: Text(
             'Documento eliminado',
-            style: TextStyle(color: Theme.of(context).primaryColor),
+            style: TextStyle(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          backgroundColor: Theme.of(context).cardColor,
+          backgroundColor: Theme.of(context).primaryColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          elevation: 0,
           duration: const Duration(seconds: 2),
         ),
       );
@@ -365,7 +403,7 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                       color: Theme.of(context).brightness == Brightness.dark
                           ? Colors.grey.shade800.withOpacity(0.6)
                           : Colors.grey.shade300.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: TextField(
                       onChanged: (val) => setState(() => _searchQuery = val),
@@ -403,19 +441,33 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                       color: Theme.of(context).primaryColor.withOpacity(0.2),
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      'Tu biblioteca está vacía',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor.withOpacity(0.6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Text(
+                        'Tu biblioteca está vacía',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              Theme.of(context).primaryColor.withOpacity(0.6),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Toca el botón + para añadir.',
-                      style: TextStyle(
-                        color: Theme.of(context).primaryColor.withOpacity(0.4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Text(
+                        'Toca el botón + para añadir.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color:
+                              Theme.of(context).primaryColor.withOpacity(0.4),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -492,6 +544,8 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                     color: Theme.of(context).primaryColor.withOpacity(0.6),
                     fontSize: 13,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Icon(
                   CupertinoIcons.chevron_right,
@@ -549,9 +603,9 @@ class _BibliotecaTabState extends State<BibliotecaTab> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withOpacity(0.04),
                     blurRadius: 20,
-                    offset: const Offset(0, 8),
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),

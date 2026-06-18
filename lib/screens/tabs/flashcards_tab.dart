@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/local_db_service.dart';
 
 List<Map<String, String>> _procesarFlashcardsEnFondo(
@@ -28,6 +29,7 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
   final _contenidoController = TextEditingController();
   final _mazoController = TextEditingController();
   List<Map<String, String>> _misFlashcards = [];
+  List<Map<String, String>> _misNotas = [];
 
   int _modoFlashcards = 0;
   bool _quizActivo = false;
@@ -44,10 +46,12 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
   Future<void> _cargarFlashcards() async {
     await Future.delayed(const Duration(milliseconds: 250));
     final raw = LocalDbService.obtenerFlashcards();
+    final rawNotas = LocalDbService.obtenerNotas();
     final procesado = await compute(_procesarFlashcardsEnFondo, raw);
     if (mounted) {
       setState(() {
         _misFlashcards = procesado;
+        _misNotas = rawNotas;
         _isLoading = false;
       });
     }
@@ -299,6 +303,232 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
     );
   }
 
+  void _mostrarCreadorDeApuntes(
+    BuildContext context, {
+    Map<String, String>? notaExistente,
+    int? index,
+  }) {
+    final titleCtrl =
+        TextEditingController(text: notaExistente?['titulo'] ?? '');
+    final contentCtrl =
+        TextEditingController(text: notaExistente?['contenido'] ?? '');
+    String selectedColor =
+        notaExistente?['color'] ?? '0xFFFBF0D9'; // Sepia por defecto
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: Theme.of(context).cardColor.withOpacity(0.95),
+              height: MediaQuery.of(context).size.height * 0.93,
+              child: SafeArea(
+                child: StatefulBuilder(
+                  builder: (context, setModalState) {
+                    return Column(
+                      children: [
+                        // Barra superior nativa iOS
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0, vertical: 8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancelar',
+                                    style: TextStyle(
+                                        color: CupertinoColors.destructiveRed)),
+                              ),
+                              const Text('Apunte de Estudio',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 17)),
+                              CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  final uuid = notaExistente?['id'] ??
+                                      DateTime.now()
+                                          .millisecondsSinceEpoch
+                                          .toString();
+                                  final titulo = titleCtrl.text.trim().isEmpty
+                                      ? 'Sin título'
+                                      : titleCtrl.text.trim();
+                                  final contenido = contentCtrl.text;
+
+                                  setState(() {
+                                    final nuevaNota = {
+                                      'id': uuid,
+                                      'titulo': titulo,
+                                      'contenido': contenido,
+                                      'color': selectedColor,
+                                      'fecha': DateTime.now().toIso8601String(),
+                                    };
+                                    if (notaExistente != null &&
+                                        index != null) {
+                                      _misNotas[index] = nuevaNota;
+                                    } else {
+                                      _misNotas.insert(0, nuevaNota);
+                                    }
+                                  });
+                                  LocalDbService.guardarNotas(_misNotas);
+                                  Navigator.pop(context);
+                                },
+                                child: const Text('Guardar',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        // Barra de herramientas Rich Text
+                        Container(
+                          height: 50,
+                          color:
+                              Theme.of(context).primaryColor.withOpacity(0.05),
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            children: [
+                              IconButton(
+                                  icon: const Icon(CupertinoIcons.bold),
+                                  onPressed: () =>
+                                      HapticFeedback.lightImpact()),
+                              IconButton(
+                                  icon: const Icon(CupertinoIcons.italic),
+                                  onPressed: () =>
+                                      HapticFeedback.lightImpact()),
+                              IconButton(
+                                  icon: const Icon(CupertinoIcons.underline),
+                                  onPressed: () =>
+                                      HapticFeedback.lightImpact()),
+                              const VerticalDivider(indent: 10, endIndent: 10),
+                              IconButton(
+                                  icon: const Icon(CupertinoIcons.list_bullet),
+                                  onPressed: () =>
+                                      HapticFeedback.lightImpact()),
+                              IconButton(
+                                  icon: const Icon(CupertinoIcons.list_number),
+                                  onPressed: () =>
+                                      HapticFeedback.lightImpact()),
+                              const VerticalDivider(indent: 10, endIndent: 10),
+                              ...[
+                                '0xFFFBF0D9', // Sepia
+                                '0xFFFFFFFF', // Blanco
+                                '0xFFFFF59D', // Amarillo
+                                '0xFFA5D6A7', // Verde
+                                '0xFF90CAF9', // Azul
+                              ].map((colorHex) {
+                                final isSelected = selectedColor == colorHex;
+                                return GestureDetector(
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    setModalState(
+                                        () => selectedColor = colorHex);
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 10),
+                                    width: 30,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      color: Color(int.parse(colorHex)),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context).primaryColor
+                                            : Colors.grey.withOpacity(0.3),
+                                        width: isSelected ? 2 : 1,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        // Editor de texto (Rich Text simulado)
+                        Expanded(
+                          child: Container(
+                            color: Color(int.parse(selectedColor)),
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(
+                                  parent: AlwaysScrollableScrollPhysics()),
+                              padding: EdgeInsets.only(
+                                left: 24,
+                                right: 24,
+                                top: 24,
+                                bottom:
+                                    MediaQuery.of(context).viewInsets.bottom +
+                                        100,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TextField(
+                                    controller: titleCtrl,
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.black87,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Título de la libreta',
+                                      hintStyle: TextStyle(
+                                          color: Colors.black.withOpacity(0.3)),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                    ),
+                                    maxLines: null,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: contentCtrl,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      height: 1.6,
+                                      color: Colors.black87,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Comienza a escribir tus apuntes aquí...',
+                                      hintStyle: TextStyle(
+                                          color: Colors.black.withOpacity(0.3)),
+                                      border: InputBorder.none,
+                                    ),
+                                    maxLines: null,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -310,7 +540,7 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
               ? 'Flashcards 🎴'
               : _modoFlashcards == 1
                   ? 'Modo Estudio 🧠'
-                  : 'Bloques de Notas 📚',
+                  : 'Apuntes 📚',
           style: const TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
@@ -341,7 +571,7 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('Apuntes de Estudio'),
+                    label: const Text('Apuntes'),
                     selected: _modoFlashcards == 2,
                     onSelected: (val) => setState(() => _modoFlashcards = 2),
                   ),
@@ -354,9 +584,14 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 90.0),
         child: FloatingActionButton(
-          onPressed: () => _modoFlashcards == 0
-              ? _mostrarCreadorDeFlashcards(context)
-              : null,
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            if (_modoFlashcards == 0) {
+              _mostrarCreadorDeFlashcards(context);
+            } else if (_modoFlashcards == 2) {
+              _mostrarCreadorDeApuntes(context);
+            }
+          },
           shape: const CircleBorder(),
           elevation: 4,
           backgroundColor: Theme.of(context).primaryColor,
@@ -554,8 +789,8 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
 
     final flashcard = _dueFlashcards[_quizIndex];
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        const SizedBox(height: 20),
         Text(
           'Repaso ${_quizIndex + 1} de ${_dueFlashcards.length}',
           style: TextStyle(
@@ -563,24 +798,85 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
             color: Theme.of(context).primaryColor.withOpacity(0.5),
           ),
         ),
-        const SizedBox(height: 24),
-        SizedBox(
-          height: 380,
-          width: MediaQuery.of(context).size.width * 0.8,
-          child: _FlashcardItem(
-            nota: flashcard,
-            onLongPress: () {},
-            onEdit: () {},
+        const SizedBox(height: 16),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Center(
+              child: Dismissible(
+                key: ValueKey('${flashcard['titulo']}_$_quizIndex'),
+                direction: DismissDirection.horizontal,
+                onDismissed: (direction) {
+                  HapticFeedback.mediumImpact();
+                  if (direction == DismissDirection.endToStart) {
+                    _procesarRespuesta(2); // Swipe Izquierda -> Difícil
+                  } else {
+                    _procesarRespuesta(5); // Swipe Derecha -> Fácil
+                  }
+                },
+                background: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 32),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.activeGreen.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.checkmark_circle_fill,
+                          color: Colors.white, size: 50),
+                      SizedBox(height: 8),
+                      Text('Fácil',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18)),
+                    ],
+                  ),
+                ),
+                secondaryBackground: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 32),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.destructiveRed.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.xmark_circle_fill,
+                          color: Colors.white, size: 50),
+                      SizedBox(height: 8),
+                      Text('Difícil',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18)),
+                    ],
+                  ),
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.55,
+                  width: double.infinity,
+                  child: _FlashcardItem(
+                    nota: flashcard,
+                    onLongPress: () {},
+                    onEdit: () {},
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 24),
         const Text(
-          '¿Qué tan fácil fue recordar esto?',
+          'Desliza la tarjeta o usa los botones',
           style: TextStyle(color: Colors.grey, fontSize: 14),
         ),
         const SizedBox(height: 16),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 120.0),
           child: Row(
             children: [
               Expanded(
@@ -676,63 +972,148 @@ class _FlashcardsTabState extends State<FlashcardsTab> {
   }
 
   Widget _construirBloquesNotas() {
-    if (_misFlashcards.isEmpty)
-      return const Center(
-        child: Text(
-          'Sin bloques de notas',
-          style: TextStyle(color: Colors.grey),
+    if (_misNotas.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CupertinoIcons.book,
+                size: 80,
+                color: Theme.of(context).primaryColor.withOpacity(0.2)),
+            const SizedBox(height: 16),
+            Text(
+              'No tienes apuntes',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor.withOpacity(0.6)),
+            ),
+          ],
         ),
       );
-    return ListView.separated(
+    }
+
+    return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
-      physics: const BouncingScrollPhysics(),
-      itemCount: _misFlashcards.length,
-      separatorBuilder: (c, i) => const SizedBox(height: 16),
+      physics:
+          const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.75, // Proporción visual de libreta
+      ),
+      itemCount: _misNotas.length,
       itemBuilder: (context, index) {
-        final nota = _misFlashcards[index];
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Color(int.parse(nota['color']!)).withOpacity(0.15),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Color(int.parse(nota['color']!)).withOpacity(0.4),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    CupertinoIcons.sparkles,
-                    color: Color(int.parse(nota['color']!)),
-                    size: 20,
+        final nota = _misNotas[index];
+        final colorStr = nota['color'] ?? '0xFFFBF0D9';
+        final color = Color(int.tryParse(colorStr) ?? 0xFFFBF0D9);
+
+        return GestureDetector(
+          onTap: () => _mostrarCreadorDeApuntes(context,
+              notaExistente: nota, index: index),
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            showCupertinoModalPopup(
+              context: context,
+              builder: (ctx) => CupertinoActionSheet(
+                title: Text(nota['titulo'] ?? 'Opciones de Apunte'),
+                message: const Text('¿Qué deseas hacer con esta libreta?'),
+                actions: [
+                  CupertinoActionSheetAction(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.pop(ctx);
+                      final texto =
+                          '${nota['titulo'] ?? 'Sin título'}\n\n${nota['contenido'] ?? ''}';
+                      Share.share(texto, subject: nota['titulo']);
+                    },
+                    child: const Text('Exportar como Texto'),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      nota['titulo']!,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  CupertinoActionSheetAction(
+                    isDestructiveAction: true,
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.pop(ctx);
+                      setState(() => _misNotas.removeAt(index));
+                      LocalDbService.guardarNotas(_misNotas);
+                    },
+                    child: const Text('Eliminar Apunte'),
                   ),
                 ],
+                cancelButton: CupertinoActionSheetAction(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Divider(),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+                topLeft: Radius.circular(4),
+                bottomLeft: Radius.circular(4),
               ),
-              Text(
-                nota['contenido']!,
-                style: const TextStyle(fontSize: 15, height: 1.5),
-              ),
-            ],
-          ),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(2, 4)),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Lomo de la libreta
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 12,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.1),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(4),
+                        bottomLeft: Radius.circular(4),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nota['titulo'] ?? 'Sin título',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.black87),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Text(
+                          nota['contenido'] ?? '',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black.withOpacity(0.6),
+                              height: 1.4),
+                          overflow: TextOverflow.fade,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fade().scale(delay: (index % 10 * 50).ms),
         );
       },
     );
@@ -807,11 +1188,11 @@ class _FlashcardItemState extends State<_FlashcardItem>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Color(int.parse(widget.nota['color']!)),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
+                    blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),
                 ],
